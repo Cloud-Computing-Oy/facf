@@ -143,3 +143,113 @@ test("broker rechecks offer expiry before acquiring a later retry candidate", as
     return true;
   });
 });
+
+test("broker records the completed lease and meter to the audit log on success", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const meterCalls = [];
+  const auditLog = {
+    async recordLease(lease) { leaseCalls.push(lease); },
+    async recordMeter(meter) { meterCalls.push(meter); }
+  };
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(leaseCalls.length, 1);
+  assert.equal(leaseCalls[0].leaseId, execution.lease.leaseId);
+  assert.equal(leaseCalls[0].state, "completed");
+  assert.equal(meterCalls.length, 1);
+  assert.equal(meterCalls[0].meterId, execution.meter.meterId);
+});
+
+test("broker records each failed attempt before recording the eventual success", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const auditLog = { async recordLease(lease) { leaseCalls.push(lease); }, async recordMeter() {} };
+  const firstOffer = offer({ offerId: "offer-a", providerId: "provider-a", qualityScore: 1 });
+  const secondOffer = offer({ offerId: "offer-b", providerId: "provider-b", qualityScore: 0.8 });
+  const first = new SimulatedProvider({ offer: firstOffer, failureCode: "runtime_unreachable", clock: fixedClock, idFactory });
+  const second = new SimulatedProvider({ offer: secondOffer, responseText: "second provider", clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog });
+  await broker.run(workload(), [firstOffer, secondOffer], new Map([["provider-a", first], ["provider-b", second]]));
+  assert.equal(leaseCalls.length, 2);
+  assert.equal(leaseCalls[0].state, "failed");
+  assert.equal(leaseCalls[0].providerId, "provider-a");
+  assert.equal(leaseCalls[1].state, "completed");
+  assert.equal(leaseCalls[1].providerId, "provider-b");
+});
+
+test("broker records only the fallback meter, no lease, when no FACF attempt is made", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const meterCalls = [];
+  const auditLog = { async recordLease(lease) { leaseCalls.push(lease); }, async recordMeter(meter) { meterCalls.push(meter); } };
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"] }, async execute() { return { text: "cloud result", usage: { inputTokens: 1, outputTokens: 2 }, priceEur: 0.02 }; } };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory, auditLog });
+  const execution = await broker.run(workload(), [], new Map());
+  assert.equal(execution.route, "fallback");
+  assert.equal(leaseCalls.length, 0);
+  assert.equal(meterCalls.length, 1);
+  assert.equal(meterCalls[0].outcome, "fallback");
+});
+
+test("broker records a failed attempt lease even when the whole run is exhausted without fallback", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const meterCalls = [];
+  const auditLog = { async recordLease(lease) { leaseCalls.push(lease); }, async recordMeter(meter) { meterCalls.push(meter); } };
+  const provider = { execute: () => new Promise(() => {}) };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, maxAttempts: 1, auditLog });
+  await assert.rejects(() => broker.run(workload({ timeoutMs: 100 }), [offer()], new Map([["provider-1", provider]])), NoEligibleProviderError);
+  assert.equal(leaseCalls.length, 1);
+  assert.equal(leaseCalls[0].state, "failed");
+  assert.equal(meterCalls.length, 0);
+});
+
+test("broker never throws or blocks the response when the audit log write fails", async () => {
+  const idFactory = ids();
+  const auditLog = { async recordLease() { throw new Error("db unavailable"); }, async recordMeter() { throw new Error("db unavailable"); } };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog, logger: (entry) => logged.push(entry) });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "lease"));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "meter"));
+});
+
+test("broker never throws or blocks the response when the audit log throws synchronously", async () => {
+  const idFactory = ids();
+  const auditLog = {
+    recordLease(lease) { throw new Error("sync boom"); },
+    recordMeter(meter) { throw new Error("sync boom"); }
+  };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog, logger: (entry) => logged.push(entry) });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "lease"));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "meter"));
+});
+
+test("broker contains logger failures while reporting an audit write failure", async () => {
+  const idFactory = ids();
+  const auditLog = {
+    async recordLease() { throw new Error("db unavailable"); },
+    async recordMeter() { throw new Error("db unavailable"); }
+  };
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({
+    leaseStore: new LeaseStore({ clock: fixedClock, idFactory }),
+    clock: fixedClock,
+    idFactory,
+    auditLog,
+    logger() { throw new Error("logger unavailable"); }
+  });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+});

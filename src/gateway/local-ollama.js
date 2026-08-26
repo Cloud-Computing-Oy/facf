@@ -24,7 +24,7 @@ export function localGatewayConfig(env = process.env) {
   };
 }
 
-export function createLocalOllamaGateway(config, { fetchImpl = fetch, clock = () => new Date(), logger = () => {} } = {}) {
+export function createLocalOllamaGateway(config, { fetchImpl = fetch, clock = () => new Date(), logger = () => {}, auditLog = null } = {}) {
   if (!config?.enabled) throw new Error("Refusing live gateway startup. Set FACF_GATEWAY_ENABLE=1 after confirming workloads are public or synthetic.");
   const offer = {
     protocolVersion: "v0alpha1",
@@ -43,7 +43,7 @@ export function createLocalOllamaGateway(config, { fetchImpl = fetch, clock = ()
   };
   const adapter = new OllamaAdapter({ baseUrl: config.baseUrl, fetchImpl, timeoutMs: config.timeoutMs });
   const provider = new OllamaProvider({ offer, adapter, clock });
-  const broker = new Broker({ leaseStore: new LeaseStore({ clock, ttlMs: config.timeoutMs + 5000 }), clock, maxAttempts: 1 });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock, ttlMs: config.timeoutMs + 5000 }), clock, maxAttempts: 1, auditLog, logger });
   const offers = () => [{ ...provider.advertise(), expiresAt: new Date(clock().getTime() + 60000).toISOString() }];
   const providers = new Map([[config.providerId, provider]]);
   const policy = {

@@ -25,7 +25,7 @@ function withTimeout(promise, timeoutMs, code) {
 }
 
 export class Broker {
-  constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2 } = {}) {
+  constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2, auditLog = null, logger = () => {} } = {}) {
     if (!leaseStore) throw new TypeError("leaseStore is required");
     if (fallback) {
       const capability = fallback.capability;
@@ -41,6 +41,26 @@ export class Broker {
     this.clock = clock;
     this.idFactory = idFactory;
     this.maxAttempts = maxAttempts;
+    this.auditLog = auditLog;
+    this.logger = logger;
+  }
+
+  #recordLease(lease) {
+    if (!this.auditLog) return;
+    (async () => this.auditLog.recordLease(lease))().catch((error) => {
+      try {
+        this.logger({ event: "audit_write_failed", kind: "lease", leaseId: lease.leaseId, code: error?.code ?? error?.message });
+      } catch {}
+    });
+  }
+
+  #recordMeter(meter) {
+    if (!this.auditLog) return;
+    (async () => this.auditLog.recordMeter(meter))().catch((error) => {
+      try {
+        this.logger({ event: "audit_write_failed", kind: "meter", meterId: meter.meterId, code: error?.code ?? error?.message });
+      } catch {}
+    });
   }
 
   async run(workload, offers, providers) {
@@ -67,13 +87,19 @@ export class Broker {
         if (!provider) throw new Error("provider_not_connected");
         const execution = await withTimeout(provider.execute({ workload, lease }), workload.timeoutMs, "execution_timeout");
         this.leaseStore.transition(lease.leaseId, "completed");
-        return { route: "facf", providerId: candidate.offer.providerId, lease: this.leaseStore.get(lease.leaseId), ...execution, ranking };
+        const finalLease = this.leaseStore.get(lease.leaseId);
+        this.#recordLease(finalLease);
+        if (execution.meter) this.#recordMeter(execution.meter);
+        return { route: "facf", providerId: candidate.offer.providerId, lease: finalLease, ...execution, ranking };
       } catch (error) {
         failures.push({ providerId: candidate.offer.providerId, code: error.code ?? error.message ?? "execution_failed" });
         if (lease) {
           const current = this.leaseStore.get(lease.leaseId);
-          if (current && current.state === "running") this.leaseStore.transition(lease.leaseId, "failed");
-          else if (current && !["failed", "completed", "expired", "released"].includes(current.state)) this.leaseStore.transition(lease.leaseId, "released");
+          if (current && current.state === "running") {
+            this.#recordLease(this.leaseStore.transition(lease.leaseId, "failed"));
+          } else if (current && !["failed", "completed", "expired", "released"].includes(current.state)) {
+            this.#recordLease(this.leaseStore.transition(lease.leaseId, "released"));
+          }
         }
         if (error instanceof LeaseConflictError) continue;
       }
@@ -115,6 +141,7 @@ export class Broker {
       outcome: "fallback",
       metadata: { route: "fallback", provider: this.fallback.providerId, model: workload.model }
     });
+    this.#recordMeter(meter);
     return { route: "fallback", providerId: this.fallback.providerId, result: { output: { text: response.text }, status: "completed" }, meter, ranking, failures };
   }
 }
