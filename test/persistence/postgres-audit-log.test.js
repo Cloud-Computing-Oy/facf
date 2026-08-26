@@ -17,7 +17,7 @@ test("recordLease inserts all lease fields with ON CONFLICT (lease_id) DO NOTHIN
   const pool = fakePool();
   const auditLog = new PostgresAuditLog({ pool });
   const lease = {
-    leaseId: "lease-1", workloadId: "workload-1", offerId: "offer-1", providerId: "provider-1",
+    leaseId: "lease-1", protocolVersion: "v0alpha1", workloadId: "workload-1", offerId: "offer-1", providerId: "provider-1",
     state: "completed", issuedAt: "2026-08-26T08:00:00.000Z", expiresAt: "2026-08-26T08:00:30.000Z", attempt: 1
   };
   await auditLog.recordLease(lease);
@@ -25,7 +25,7 @@ test("recordLease inserts all lease fields with ON CONFLICT (lease_id) DO NOTHIN
   assert.match(pool.calls[0].sql, /INSERT INTO leases/);
   assert.match(pool.calls[0].sql, /ON CONFLICT \(lease_id\) DO NOTHING/);
   assert.deepEqual(pool.calls[0].params, [
-    "lease-1", "workload-1", "offer-1", "provider-1", "completed",
+    "lease-1", "v0alpha1", "workload-1", "offer-1", "provider-1", "completed",
     "2026-08-26T08:00:00.000Z", "2026-08-26T08:00:30.000Z", 1
   ]);
 });
@@ -34,7 +34,7 @@ test("recordMeter inserts all meter fields with metadata serialized as JSON text
   const pool = fakePool();
   const auditLog = new PostgresAuditLog({ pool });
   const meter = {
-    meterId: "meter-1", workloadId: "workload-1", leaseId: "lease-1", providerId: "provider-1",
+    meterId: "meter-1", protocolVersion: "v0alpha1", workloadId: "workload-1", leaseId: "lease-1", providerId: "provider-1",
     startedAt: "2026-08-26T08:00:00.000Z", completedAt: "2026-08-26T08:00:01.000Z", durationMs: 1000,
     inputTokens: 4, outputTokens: 3, priceEur: 0.01, outcome: "completed", metadata: { route: "facf" }
   };
@@ -43,7 +43,7 @@ test("recordMeter inserts all meter fields with metadata serialized as JSON text
   assert.match(pool.calls[0].sql, /INSERT INTO meters/);
   assert.match(pool.calls[0].sql, /ON CONFLICT \(meter_id\) DO NOTHING/);
   assert.deepEqual(pool.calls[0].params, [
-    "meter-1", "workload-1", "lease-1", "provider-1",
+    "meter-1", "v0alpha1", "workload-1", "lease-1", "provider-1",
     "2026-08-26T08:00:00.000Z", "2026-08-26T08:00:01.000Z", 1000, 4, 3, 0.01, "completed",
     JSON.stringify({ route: "facf" })
   ]);

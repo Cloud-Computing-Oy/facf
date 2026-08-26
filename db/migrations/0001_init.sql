@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS leases (
   lease_id     TEXT PRIMARY KEY,
+  protocol_version TEXT NOT NULL,
   workload_id  TEXT NOT NULL,
   offer_id     TEXT NOT NULL,
   provider_id  TEXT NOT NULL,
@@ -14,6 +15,7 @@ CREATE INDEX IF NOT EXISTS leases_workload_id_idx ON leases (workload_id);
 
 CREATE TABLE IF NOT EXISTS meters (
   meter_id       TEXT PRIMARY KEY,
+  protocol_version TEXT NOT NULL,
   workload_id    TEXT NOT NULL,
   lease_id       TEXT NOT NULL,
   provider_id    TEXT NOT NULL,

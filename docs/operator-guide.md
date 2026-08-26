@@ -24,10 +24,10 @@ An FACF operator runs a scheduling and trust domain. Cloud Computing Oy intends 
 ## Persistence
 
 The reference implementation's Postgres audit log
-(`src/persistence/postgres-audit-log.js`) records every lease that reaches
-a terminal state and every meter event to two tables — `leases` and
-`meters` — for reconciliation and incident review. It is optional and
-inert until configured:
+(`src/persistence/postgres-audit-log.js`) records every lease that
+completes, fails, or is released, and every meter event, to two tables —
+`leases` and `meters` — for reconciliation and incident review. It is
+optional and inert until configured:
 
 1. Provision a Postgres instance and set `DATABASE_URL` (e.g.
    `postgres://user:password@host:5432/facf`) in the gateway process's

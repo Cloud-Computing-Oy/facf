@@ -14,7 +14,7 @@ test("PostgresAuditLog persists a lease and meter against a real Postgres schema
 
   const leaseId = `it-lease-${Date.now()}`;
   const lease = {
-    leaseId, workloadId: "workload-it", offerId: "offer-it", providerId: "provider-it",
+    leaseId, protocolVersion: "v0alpha1", workloadId: "workload-it", offerId: "offer-it", providerId: "provider-it",
     state: "completed", issuedAt: "2026-08-26T08:00:00.000Z", expiresAt: "2026-08-26T08:00:30.000Z", attempt: 1
   };
   await auditLog.recordLease(lease);
@@ -27,7 +27,7 @@ test("PostgresAuditLog persists a lease and meter against a real Postgres schema
 
   const meterId = `it-meter-${Date.now()}`;
   const meter = {
-    meterId, workloadId: "workload-it", leaseId, providerId: "provider-it",
+    meterId, protocolVersion: "v0alpha1", workloadId: "workload-it", leaseId, providerId: "provider-it",
     startedAt: "2026-08-26T08:00:00.000Z", completedAt: "2026-08-26T08:00:01.000Z", durationMs: 1000,
     inputTokens: 4, outputTokens: 3, priceEur: 0.01, outcome: "completed", metadata: { route: "facf" }
   };

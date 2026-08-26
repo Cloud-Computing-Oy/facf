@@ -14,7 +14,10 @@ try {
   });
   const address = await listenLocal(server, { host: config.host, port: config.port });
   console.log(`FACF local gateway listening on http://${address.address}:${address.port}`);
-  const shutdown = () => server.close(() => process.exit(0));
+  const shutdown = () => server.close(async () => {
+    await auditLog?.pool.end().catch(() => {});
+    process.exit(0);
+  });
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 } catch (error) {
