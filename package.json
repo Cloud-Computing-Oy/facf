@@ -11,6 +11,7 @@
     "check": "node scripts/check-docs.mjs && node scripts/check-protocol.mjs",
     "demo": "node src/cli/demo.js",
     "demo:live": "node src/cli/live-ollama-demo.js",
+    "gateway:local": "node src/cli/local-gateway.js",
     "test": "node --test"
   },
   "license": "Apache-2.0"

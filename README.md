@@ -133,6 +133,22 @@ authentication or mTLS, does not yet stream tokens incrementally from the
 runtime, and must not be exposed to a LAN or the public internet. See the
 [`Phase 1 local gateway spec`](agent-os/specs/2026-08-26-1630-phase-1-local-gateway/plan.md).
 
+Run the complete local Ollama vertical slice only after confirming that requests
+contain public or synthetic test data:
+
+```bash
+FACF_GATEWAY_ENABLE=1 \
+FACF_OLLAMA_MODEL=qwen2.5:7b \
+FACF_OLLAMA_URL=http://127.0.0.1:11434 \
+npm run gateway:local
+```
+
+It listens on `http://127.0.0.1:8787` and exposes `GET /healthz` plus
+`POST /v1/chat/completions`. The process refuses startup without the consent
+flag, validates configuration before listening, and cannot be configured to
+bind beyond loopback. See the
+[`runnable local gateway spec`](agent-os/specs/2026-08-26-1645-runnable-local-ollama-gateway/plan.md).
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md).

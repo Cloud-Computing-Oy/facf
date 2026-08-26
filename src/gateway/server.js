@@ -17,7 +17,7 @@ const DEFAULT_POLICY = Object.freeze({
 });
 
 export function createGatewayServer({ broker, offers, providers, policy = {}, logger = () => {} } = {}) {
-  if (!broker || !Array.isArray(offers) || !(providers instanceof Map)) throw new TypeError("broker, offers, and providers are required");
+  if (!broker || !(Array.isArray(offers) || typeof offers === "function") || !(providers instanceof Map)) throw new TypeError("broker, offers, and providers are required");
   const effectivePolicy = { ...DEFAULT_POLICY, ...policy };
   return http.createServer(async (request, response) => {
     const requestId = randomUUID();
@@ -26,7 +26,9 @@ export function createGatewayServer({ broker, offers, providers, policy = {}, lo
       if (request.method !== "POST" || request.url !== "/v1/chat/completions") return sendError(response, 404, "not_found", "route not found");
       const body = await readJson(request, effectivePolicy.maxBodyBytes);
       const workload = toWorkload(body, effectivePolicy);
-      const execution = await broker.run(workload, offers, providers);
+      const availableOffers = typeof offers === "function" ? offers() : offers;
+      if (!Array.isArray(availableOffers)) throw new TypeError("offers function must return an array");
+      const execution = await broker.run(workload, availableOffers, providers);
       const completion = completionFromExecution(execution, workload);
       logger({ event: "completion", requestId, route: execution.route, providerId: execution.providerId });
       if (body.stream === true) return sendStream(response, completion);
