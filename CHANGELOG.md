@@ -4,6 +4,8 @@
 
 - Add a local-only OpenAI-compatible chat-completions gateway with bounded
   request translation, JSON and SSE response modes, safe errors, and tests.
+- Add an explicitly enabled runnable local Ollama gateway that wires the broker,
+  lease store, provider, dynamic offer, and HTTP boundary together.
 
 All notable project changes will be recorded here.
 
