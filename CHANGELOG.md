@@ -6,6 +6,8 @@
   request translation, JSON and SSE response modes, safe errors, and tests.
 - Add an explicitly enabled runnable local Ollama gateway that wires the broker,
   lease store, provider, dynamic offer, and HTTP boundary together.
+- Add enrolled provider presence and outbound mTLS capability-heartbeat
+  primitives with strict identity, freshness, size, and expiry boundaries.
 
 All notable project changes will be recorded here.
 

@@ -2,6 +2,7 @@ const TRUST_TIERS = ["community", "verified", "confidential", "private"];
 const DATA_CLASSES = ["public", "synthetic", "internal", "confidential"];
 const LEASE_STATES = ["offered", "accepted", "running", "completed", "failed", "expired", "released"];
 const FORBIDDEN_METER_KEYS = new Set(["prompt", "input", "output", "messages", "response", "content"]);
+const RUNTIMES = ["simulator", "ollama", "vllm"];
 
 export class ProtocolValidationError extends Error {
   constructor(kind, issues) {
@@ -83,6 +84,20 @@ export function validateOffer(value) {
   if (Number.isFinite(value.qualityScore) && value.qualityScore > 1) issues.push("qualityScore must be <= 1");
   date(value.expiresAt, "expiresAt", issues);
   finish("offer", issues);
+  return value;
+}
+
+export function validateCapability(value) {
+  const issues = [];
+  if (!object(value, "capability", issues)) finish("capability", issues);
+  version(value.protocolVersion, issues);
+  for (const key of ["providerId", "capabilityId", "region"]) text(value[key], key, issues);
+  stringArray(value.models, "models", issues);
+  if (!RUNTIMES.includes(value.runtime)) issues.push("runtime is unsupported");
+  if (!TRUST_TIERS.includes(value.trustTier)) issues.push("trustTier is unsupported");
+  if (!Number.isInteger(value.slots) || value.slots < 1 || value.slots > 1024) issues.push("slots must be an integer between 1 and 1024");
+  date(value.expiresAt, "expiresAt", issues);
+  finish("capability", issues);
   return value;
 }
 
