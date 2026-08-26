@@ -19,6 +19,9 @@ export class Broker {
       if (!capability || typeof capability.region !== "string" || typeof capability.trustTier !== "string" || !Array.isArray(capability.dataClasses)) {
         throw new TypeError("fallback.capability with region, trustTier, and dataClasses is required to authorize fallback routing");
       }
+      if (capability.maxPriceEur !== undefined && (!Number.isFinite(capability.maxPriceEur) || capability.maxPriceEur < 0)) {
+        throw new TypeError("fallback.capability.maxPriceEur must be a non-negative finite number");
+      }
     }
     this.leaseStore = leaseStore;
     this.fallback = fallback;

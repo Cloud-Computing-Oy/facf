@@ -67,6 +67,12 @@ test("broker requires fallback capability metadata to authorize fallback routing
   assert.throws(() => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory }), TypeError);
 });
 
+test("broker rejects a fallback with a non-finite declared price ceiling", () => {
+  const idFactory = ids();
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"], maxPriceEur: Number.NaN }, async execute() { return { text: "unchecked", usage: {}, priceEur: 0.01 }; } };
+  assert.throws(() => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory }), TypeError);
+});
+
 test("broker rejects a fallback that fails workload policy without ever invoking execute", async () => {
   const idFactory = ids();
   let executed = false;

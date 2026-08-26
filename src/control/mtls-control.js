@@ -17,7 +17,10 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
     // Without this listener, Node treats socket.destroy(err) (and any other socket
     // error) as an unhandled 'error' event and crashes the process — letting any
     // CA-trusted client take down the control server with one bad message.
-    socket.on("error", (error) => logger({ event: "control_socket_error", providerId: connectedProviderId, code: error.code ?? error.message }));
+    socket.on("error", (error) => {
+      logger({ event: "control_socket_error", providerId: connectedProviderId, code: error.code ?? error.message });
+      socket.destroy();
+    });
     socket.setTimeout(idleTimeoutMs, () => socket.destroy());
     let buffered = "";
     socket.setEncoding("utf8");
@@ -76,7 +79,10 @@ export function connectControlAgent({ host, port, servername, key, cert, ca, age
   // Same crash risk as the server's accepted socket: without this listener, an
   // unhandled 'error' event (including our own socket.destroy(err) below on a
   // malformed broker message) takes down the whole agent process.
-  socket.on("error", (error) => logger({ event: "control_socket_error", code: error.code ?? error.message }));
+  socket.on("error", (error) => {
+    logger({ event: "control_socket_error", code: error.code ?? error.message });
+    socket.destroy();
+  });
   const send = () => socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", messageId: idFactory(), sentAt: clock().toISOString(), agentId, type: "capability", payload: { ...capability, expiresAt: new Date(clock().getTime() + Math.min(heartbeatMs * 2, 30000)).toISOString() } })}\n`);
   socket.once("secureConnect", send);
   let buffered = "";
