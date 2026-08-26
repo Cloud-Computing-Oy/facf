@@ -1,8 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
-import { validateOffer, validateWorkload } from "../src/protocol/validate.js";
+import { validateExecutionGrant, validateLeaseRequest, validateOffer, validateWorkload } from "../src/protocol/validate.js";
 
 const root = new URL("../protocol/v0alpha1/", import.meta.url);
-const expectedSchemas = ["capability", "lease", "meter", "offer", "result", "workload"];
+const expectedSchemas = ["capability", "execution-grant", "lease", "lease-request", "meter", "offer", "result", "workload"];
 const files = await readdir(root);
 for (const name of expectedSchemas) {
   const filename = `${name}.schema.json`;
@@ -14,4 +14,6 @@ for (const name of expectedSchemas) {
 }
 validateWorkload(JSON.parse(await readFile(new URL("fixtures/workload.public.json", root), "utf8")));
 validateOffer(JSON.parse(await readFile(new URL("fixtures/offer.laptop.json", root), "utf8")));
+validateLeaseRequest(JSON.parse(await readFile(new URL("fixtures/lease-request.local.json", root), "utf8")));
+validateExecutionGrant(JSON.parse(await readFile(new URL("fixtures/execution-grant.local.json", root), "utf8")));
 console.log(`Protocol validation passed (${expectedSchemas.length} schemas).`);

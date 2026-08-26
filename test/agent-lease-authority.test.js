@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { AgentLeaseAuthority, AgentLeaseError } from "../src/control/agent-lease-authority.js";
+
+let now;
+const request = (overrides = {}) => ({ protocolVersion: "v0alpha1", leaseId: "lease-1", workloadId: "work-1", providerId: "provider-1", capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: "2026-08-26T14:00:00.000Z", expiresAt: "2026-08-26T14:00:20.000Z", ...overrides });
+const authority = (overrides = {}) => new AgentLeaseAuthority({ providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], clock: () => now, idFactory: () => "grant-1", tokenFactory: () => "A".repeat(43), ...overrides });
+
+test.beforeEach(() => { now = new Date("2026-08-26T14:00:00.000Z"); });
+test("agent issues one least-privilege idempotent grant", () => { const agent = authority(); const grant = agent.request(request()); assert.equal(grant.scope, "execute:model"); assert.equal(agent.request(request()).token, grant.token); assert.equal(agent.authorize({ leaseId: "lease-1", token: grant.token, model: "qwen2.5:7b" }), true); assert.equal(agent.authorize({ leaseId: "lease-1", token: "B".repeat(43), model: "qwen2.5:7b" }), false); assert.equal(agent.activeCount(), 1); });
+test("idempotent retry must retain the original request binding", () => { const agent = authority(); agent.request(request()); assert.throws(() => agent.request(request({ workloadId: "work-other" })), (error) => error instanceof AgentLeaseError && error.code === "idempotency_conflict"); });
+test("agent rejects overlap and mismatched lease policy", () => { const agent = authority(); agent.request(request()); const cases = [[request({ leaseId: "lease-2", workloadId: "work-2" }), "capacity_unavailable"], [request({ leaseId: "lease-3", providerId: "provider-2" }), "provider_mismatch"], [request({ leaseId: "lease-3", capabilityId: "cap-2" }), "capability_mismatch"], [request({ leaseId: "lease-3", model: "other" }), "model_unavailable"]]; for (const [value, code] of cases) assert.throws(() => agent.request(value), (error) => error instanceof AgentLeaseError && error.code === code); });
+test("grant expiry and release free local capacity", () => { const agent = authority(); const grant = agent.request(request()); assert.equal(agent.release("lease-1"), true); assert.equal(agent.activeCount(), 0); agent.request(request({ leaseId: "lease-2" })); now = new Date("2026-08-26T14:00:21.000Z"); assert.equal(agent.authorize({ leaseId: "lease-2", token: grant.token, model: "qwen2.5:7b" }), false); assert.equal(agent.activeCount(), 0); });
+test("grant deadline and unknown fields fail closed", () => { const agent = authority(); assert.throws(() => agent.request(request({ expiresAt: "2026-08-26T14:01:00.000Z" })), (error) => error instanceof AgentLeaseError && error.code === "invalid_deadline"); assert.throws(() => agent.request({ ...request(), prompt: "must not cross control plane" }), /unknown field prompt/); });

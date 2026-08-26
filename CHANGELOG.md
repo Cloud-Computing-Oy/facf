@@ -8,6 +8,8 @@
   lease store, provider, dynamic offer, and HTTP boundary together.
 - Add enrolled provider presence and outbound mTLS capability-heartbeat
   primitives with strict identity, freshness, size, and expiry boundaries.
+- Add strict provider-side lease requests and short-lived, least-privilege
+  execution grants with idempotency and local slot exclusion.
 
 All notable project changes will be recorded here.
 

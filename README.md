@@ -163,6 +163,14 @@ yet a runnable multi-node deployment. Certificate issuance and rotation,
 reconnect policy, durable state, and the remote data plane remain future work.
 See the [`mTLS control spec`](agent-os/specs/2026-08-26-1655-mtls-provider-control/plan.md).
 
+The provider-side alpha also defines strict lease-request and execution-grant
+contracts. A local agent is the final authority for its slots: it accepts only
+its enrolled provider, capability, and model, returns the same grant for an
+idempotent retry, rejects overlapping leases, and releases capacity on explicit
+release or expiry. The 256-bit bearer token is scoped to one lease, workload,
+provider, model, and deadline and must never enter logs. The grant is not yet
+wired onto the mTLS channel or into remote runtime execution.
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md).

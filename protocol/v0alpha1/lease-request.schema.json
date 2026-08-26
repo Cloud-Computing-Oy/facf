@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://facf.dev/protocol/v0alpha1/lease-request.schema.json",
+  "title": "FACF Provider Lease Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "leaseId", "workloadId", "providerId", "capabilityId", "model", "issuedAt", "expiresAt"],
+  "properties": {
+    "protocolVersion": { "const": "v0alpha1" },
+    "leaseId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "workloadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "providerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "capabilityId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "model": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}

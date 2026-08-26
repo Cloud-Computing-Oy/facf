@@ -54,6 +54,11 @@ function finish(kind, issues) {
   if (issues.length) throw new ProtocolValidationError(kind, issues);
 }
 
+function exactKeys(value, allowed, issues) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  for (const key of Object.keys(value)) if (!allowed.includes(key)) issues.push(`unknown field ${key}`);
+}
+
 export function validateWorkload(value) {
   const issues = [];
   if (!object(value, "workload", issues)) finish("workload", issues);
@@ -99,6 +104,28 @@ export function validateCapability(value) {
   date(value.expiresAt, "expiresAt", issues);
   finish("capability", issues);
   return value;
+}
+
+export function validateLeaseRequest(value) {
+  const issues = [];
+  if (!object(value, "leaseRequest", issues)) finish("leaseRequest", issues);
+  exactKeys(value, ["protocolVersion", "leaseId", "workloadId", "providerId", "capabilityId", "model", "issuedAt", "expiresAt"], issues);
+  version(value.protocolVersion, issues);
+  for (const key of ["leaseId", "workloadId", "providerId", "capabilityId", "model"]) text(value[key], key, issues);
+  date(value.issuedAt, "issuedAt", issues); date(value.expiresAt, "expiresAt", issues);
+  finish("leaseRequest", issues); return value;
+}
+
+export function validateExecutionGrant(value) {
+  const issues = [];
+  if (!object(value, "executionGrant", issues)) finish("executionGrant", issues);
+  exactKeys(value, ["protocolVersion", "grantId", "token", "leaseId", "workloadId", "providerId", "model", "scope", "issuedAt", "expiresAt"], issues);
+  version(value.protocolVersion, issues);
+  for (const key of ["grantId", "token", "leaseId", "workloadId", "providerId", "model"]) text(value[key], key, issues);
+  if (typeof value.token === "string" && value.token.length < 43) issues.push("token must contain at least 256 bits encoded as base64url");
+  if (value.scope !== "execute:model") issues.push("scope must be execute:model");
+  date(value.issuedAt, "issuedAt", issues); date(value.expiresAt, "expiresAt", issues);
+  finish("executionGrant", issues); return value;
 }
 
 export function validateLease(value) {
