@@ -9,10 +9,11 @@ inference requests or asynchronous jobs to one provider cell at a time. It does
 not attempt to stretch a single Kubernetes cluster or GPU tensor-parallel job
 across the public internet.
 
-> **Project status: Phase 0 protocol and deterministic simulator.** The
-> repository includes executable scheduling, lease, provider, metering, Ollama
-> adapter, and fallback boundaries. No production network, token, marketplace,
-> or confidentiality guarantee exists yet.
+> **Project status: Phase 1 alpha, working toward G2 private federation.** The
+> repository includes deterministic scheduling, a loopback gateway, Ollama,
+> enrolled mTLS provider control, lease negotiation, and optional Postgres audit
+> persistence. No production network, incremental remote token streaming,
+> marketplace, or confidentiality guarantee exists yet.
 
 ## Why FACF?
 
@@ -111,7 +112,8 @@ npm run demo:live
 ```
 
 Do not point the alpha adapter at an untrusted endpoint or use it for sensitive
-data. Remote-provider identity and mTLS are Phase 1 work.
+data. Remote-provider identity and lease negotiation are implemented Phase 1
+alpha slices; production certificate lifecycle remains future work.
 
 Machine-readable alpha contracts are in
 [`protocol/v0alpha1`](protocol/v0alpha1/README.md). The implementation plan and
@@ -170,9 +172,11 @@ provider ID match a manual enrollment. Unknown message types, stale envelopes,
 oversized messages, and capabilities valid for more than 30 seconds fail
 closed. Expired presence is excluded from active providers.
 
-This control channel carries no prompts, results, leases, or secrets and is not
-yet a runnable multi-node deployment. Certificate issuance and rotation,
-reconnect policy, durable state, and the remote data plane remain future work.
+This connection carries capability and lease-control messages. The bounded G2
+slice also carries complete public or synthetic execution requests and terminal
+results; it is not a general-purpose tunnel or runnable production deployment.
+Certificate issuance and rotation, reconnect policy, durable event delivery,
+and incremental token streaming remain future work.
 See the [`mTLS control spec`](agent-os/specs/2026-08-26-1655-mtls-provider-control/plan.md).
 
 The provider-side alpha also defines strict lease-request and execution-grant
@@ -180,16 +184,16 @@ contracts. A local agent is the final authority for its slots: it accepts only
 its enrolled provider, capability, and model, returns the same grant for an
 idempotent retry, rejects overlapping leases, and releases capacity on explicit
 release or expiry. The 256-bit bearer token is scoped to one lease, workload,
-provider, model, and deadline and must never enter logs. The grant is not yet
-wired onto the mTLS channel or into remote runtime execution.
+provider, model, and deadline and must never enter logs. The grant is
+transported only inside the authenticated execution request.
 
 Lease negotiation is now transported bidirectionally over the authenticated
 control connection. The broker sends a content-free request only to a currently
 active provider, correlates one bounded response, and revalidates the returned
 grant against the original lease binding. The agent uses its local lease
 authority and returns either the short-lived grant or a stable rejection code.
-Timeouts and disconnects fail closed. Prompt and result transport remains
-explicitly unimplemented.
+Timeouts and disconnects fail closed. After execution dispatch, an unknown
+outcome disables transparent retry or fallback to prevent double work.
 
 ## Documentation
 

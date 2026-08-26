@@ -2,10 +2,13 @@
 
 ## Current milestone
 
-Phase 0 now has an executable deterministic simulator and v0alpha1 protocol
-fixtures. This milestone validates whole-workload selection, lease exclusion,
-provider failure, and cloud fallback semantics locally. It does not satisfy the
-closed inference MVP or any production-readiness gate.
+Phase 0 and the local Phase 1 gateway are implemented, alongside authenticated
+provider presence, lease negotiation, and optional best-effort Postgres audit
+persistence. The current G2 slice adds one complete lease-bound execution and
+terminal result over the existing outbound mTLS connection. Incremental token
+streaming, NATS delivery, certificate lifecycle automation, and a 30-day pilot
+remain incomplete; this slice does not satisfy the closed inference MVP or any
+production-readiness gate.
 
 ## Objective
 

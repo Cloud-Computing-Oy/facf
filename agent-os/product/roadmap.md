@@ -12,7 +12,7 @@ state transitions.
 
 ## Phase 1: Closed Inference MVP
 
-- Go reference provider agent and broker.
+- Node.js reference provider agent and broker (ADR 0004).
 - Outbound mTLS control stream.
 - Ollama and vLLM runtime adapters.
 - OpenAI-compatible chat-completions gateway with streaming.
@@ -24,6 +24,16 @@ state transitions.
 
 Exit gate: a 30-day internal/partner pilot completes reliability, incident,
 metering, demand, unit-economics, and reconciliation reviews.
+
+### Current G2 milestone: bounded remote execution
+
+The next vertical slice transports one complete public or synthetic workload
+and its terminal result over the authenticated provider connection. It must
+bind execution to the accepted lease and short-lived grant, reject replays with
+different content, bound message size and deadlines, and prevent automatic
+fallback when a dispatched execution has an unknown outcome. Two manually
+enrolled provider cells must pass deterministic failure and reconciliation
+tests before incremental token streaming or NATS event delivery is added.
 
 ## Phase 2: Managed Verified Network
 
