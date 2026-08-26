@@ -72,6 +72,7 @@ function isTrustedHost(header, expectedPort) {
     hostname = header.slice(0, at);
     portPart = header.slice(at + 1);
   }
+  hostname = hostname.toLowerCase(); // Host header hostnames are case-insensitive per RFC 7230
   return (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]") && portPart === String(expectedPort);
 }
 

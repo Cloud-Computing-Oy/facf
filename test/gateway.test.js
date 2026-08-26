@@ -111,3 +111,21 @@ test("HTTP gateway rejects a request whose Host header does not match the loopba
   assert.equal(response.status, 400);
   assert.equal(response.body.error.code, "untrusted_host");
 });
+
+test("HTTP gateway accepts a loopback Host header regardless of case", async (t) => {
+  const broker = { run: async () => ({ route: "facf", providerId: "p1", result: { output: { text: "ok" } }, meter: { inputTokens: 1, outputTokens: 1 } }) };
+  const server = createGatewayServer({ broker, offers: [], providers: new Map(), policy });
+  const address = await listenLocal(server, { port: 0 });
+  t.after(() => server.close());
+  const body = JSON.stringify({ model: "qwen2.5:7b", messages: [{ role: "user", content: "x" }] });
+  const response = await new Promise((resolve, reject) => {
+    const request = http.request({ host: "127.0.0.1", port: address.port, path: "/v1/chat/completions", method: "POST", headers: { "content-type": "application/json", host: `LOCALHOST:${address.port}`, "content-length": Buffer.byteLength(body) } }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode }));
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+  assert.equal(response.status, 200);
+});
