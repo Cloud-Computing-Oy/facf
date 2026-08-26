@@ -9,6 +9,8 @@ is an alpha conformance surface, not a production or compatibility promise.
 - `capability.schema.json` — provider hardware and runtime claims;
 - `offer.schema.json` — short-lived capacity and price advertisement;
 - `lease.schema.json` — bounded reservation and lifecycle state;
+- `lease-request.schema.json` — content-free provider reservation request;
+- `execution-grant.schema.json` — short-lived, least-privilege runtime grant;
 - `result.schema.json` — execution outcome without transport assumptions;
 - `meter.schema.json` — privacy-safe usage evidence.
 
