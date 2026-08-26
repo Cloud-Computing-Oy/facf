@@ -149,6 +149,20 @@ flag, validates configuration before listening, and cannot be configured to
 bind beyond loopback. See the
 [`runnable local gateway spec`](agent-os/specs/2026-08-26-1645-runnable-local-ollama-gateway/plan.md).
 
+## Authenticated provider control alpha
+
+The first private multi-node building block accepts short-lived capability
+heartbeats over outbound mutual TLS. A CA-valid client certificate is still
+rejected unless its certificate CN, optional SHA-256 fingerprint, agent ID, and
+provider ID match a manual enrollment. Unknown message types, stale envelopes,
+oversized messages, and capabilities valid for more than 30 seconds fail
+closed. Expired presence is excluded from active providers.
+
+This control channel carries no prompts, results, leases, or secrets and is not
+yet a runnable multi-node deployment. Certificate issuance and rotation,
+reconnect policy, durable state, and the remote data plane remain future work.
+See the [`mTLS control spec`](agent-os/specs/2026-08-26-1655-mtls-provider-control/plan.md).
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md).
