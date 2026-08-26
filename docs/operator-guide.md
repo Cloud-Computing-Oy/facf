@@ -21,6 +21,26 @@ An FACF operator runs a scheduling and trust domain. Cloud Computing Oy intends 
 6. Enroll a small verified provider cohort and design partners.
 7. Expand only after the operational and economic gates in [MVP scope](mvp-scope.md) pass.
 
+## Persistence
+
+The reference implementation's Postgres audit log
+(`src/persistence/postgres-audit-log.js`) records every lease that reaches
+a terminal state and every meter event to two tables — `leases` and
+`meters` — for reconciliation and incident review. It is optional and
+inert until configured:
+
+1. Provision a Postgres instance and set `DATABASE_URL` (e.g.
+   `postgres://user:password@host:5432/facf`) in the gateway process's
+   environment.
+2. Run `npm run db:migrate` once against that `DATABASE_URL` to create the
+   schema.
+3. Start the gateway as usual (`npm run gateway:local` or your own
+   process). It logs `FACF audit persistence enabled (DATABASE_URL set).`
+   on startup when configured.
+
+Without `DATABASE_URL`, the gateway runs exactly as before with no
+persistence and no new dependency installed.
+
 ## Operating safeguards
 
 - Never route by price alone.

@@ -149,6 +149,14 @@ flag, validates configuration before listening, and cannot be configured to
 bind beyond loopback. See the
 [`runnable local gateway spec`](agent-os/specs/2026-08-26-1645-runnable-local-ollama-gateway/plan.md).
 
+## Optional audit persistence
+
+The broker can record every completed/failed lease and every meter event to
+Postgres for reconciliation and incident review. It is off by default and
+adds no required dependency. Set `DATABASE_URL` and run
+`npm run db:migrate` once to enable it — see the
+[operator guide](docs/operator-guide.md#persistence) for details.
+
 ## Authenticated provider control alpha
 
 The first private multi-node building block accepts short-lived capability

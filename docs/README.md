@@ -33,6 +33,7 @@
 - [ADR 0001: Federate whole workloads](adr/0001-federate-whole-workloads.md)
 - [ADR 0002: No blockchain in the MVP](adr/0002-no-blockchain-in-mvp.md)
 - [ADR 0003: Open protocol, managed commercial network](adr/0003-open-protocol-managed-network.md)
+- [ADR 0004: Node.js reference implementation](adr/0004-node-reference-implementation.md)
 - [References](references.md)
 
 All documents describe intended behaviour unless a release explicitly marks a

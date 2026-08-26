@@ -12,10 +12,11 @@ require an Architecture Decision Record and milestone evidence.
 
 ## Backend
 
-- Go for the reference broker, gateway, and provider agent.
+- Node.js for the reference broker, gateway, and provider agent (see
+  [ADR 0004](../../docs/adr/0004-node-reference-implementation.md)).
 - NATS JetStream for durable asynchronous events.
-- Typed Go policy initially; evaluate Open Policy Agent only when externally
-  administered policies justify it.
+- Typed policy in the reference implementation initially; evaluate Open
+  Policy Agent only when externally administered policies justify it.
 
 ## Database
 
