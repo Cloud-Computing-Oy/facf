@@ -38,7 +38,11 @@ export async function createAuditLogFromEnv(env = process.env, { loadPgImpl = lo
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) return null;
   const pg = await loadPgImpl();
-  const pool = new pg.Pool({ connectionString: databaseUrl });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 5000,
+    query_timeout: 5000
+  });
   try {
     await pool.query("SELECT 1");
     return new PostgresAuditLog({ pool });

@@ -79,3 +79,19 @@ test("createAuditLogFromEnv closes its pool when the startup probe fails", async
   );
   assert.equal(ended, true);
 });
+
+test("createAuditLogFromEnv bounds the startup connection and query probe", async () => {
+  let poolOptions;
+  class Pool {
+    constructor(options) { poolOptions = options; }
+    on() {}
+    async query() { return { rows: [] }; }
+  }
+  const auditLog = await createAuditLogFromEnv(
+    { DATABASE_URL: "postgres://localhost/facf" },
+    { loadPgImpl: async () => ({ Pool }) }
+  );
+  assert.equal(poolOptions.connectionTimeoutMillis, 5000);
+  assert.equal(poolOptions.query_timeout, 5000);
+  assert.equal(auditLog.pool instanceof Pool, true);
+});
