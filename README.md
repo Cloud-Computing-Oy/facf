@@ -153,8 +153,10 @@ bind beyond loopback. See the
 
 The broker can write completed/failed leases and meter events to Postgres on a
 best-effort basis for reconciliation and incident review. Persistence failures
-are logged but do not fail or delay workloads, so this is not an immutable or
-exactly-once audit trail. It is off by default and adds no required dependency.
+are logged but do not fail or delay workloads. The broker bounds pending writes
+and drops new audit events with an `audit_write_dropped` log entry when the
+queue is full, so this is not an immutable or exactly-once audit trail. It is
+off by default and adds no required dependency.
 Set `DATABASE_URL` and run
 `npm run db:migrate` once to enable it — see the
 [operator guide](docs/operator-guide.md#persistence) for details.

@@ -253,3 +253,37 @@ test("broker contains logger failures while reporting an audit write failure", a
   assert.equal(execution.route, "facf");
   await new Promise((resolve) => setImmediate(resolve));
 });
+
+test("broker bounds pending audit writes and logs dropped events", async () => {
+  const idFactory = ids();
+  let releaseWrite;
+  const blockedWrite = new Promise((resolve) => { releaseWrite = resolve; });
+  const auditCalls = [];
+  const auditLog = {
+    recordLease(lease) { auditCalls.push({ kind: "lease", id: lease.leaseId }); return blockedWrite; },
+    recordMeter(meter) { auditCalls.push({ kind: "meter", id: meter.meterId }); return blockedWrite; }
+  };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({
+    leaseStore: new LeaseStore({ clock: fixedClock, idFactory }),
+    clock: fixedClock,
+    idFactory,
+    auditLog,
+    maxPendingAuditWrites: 1,
+    logger: (entry) => logged.push(entry)
+  });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  assert.equal(auditCalls.length, 1);
+  assert.ok(logged.some((entry) => entry.event === "audit_write_dropped" && entry.kind === "meter" && entry.code === "queue_full"));
+  releaseWrite();
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test("broker rejects an invalid audit queue bound", () => {
+  assert.throws(
+    () => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock }), maxPendingAuditWrites: 0 }),
+    /maxPendingAuditWrites must be a positive integer/
+  );
+});

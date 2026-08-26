@@ -25,7 +25,7 @@ function withTimeout(promise, timeoutMs, code) {
 }
 
 export class Broker {
-  constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2, auditLog = null, logger = () => {} } = {}) {
+  constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2, auditLog = null, maxPendingAuditWrites = 1000, logger = () => {} } = {}) {
     if (!leaseStore) throw new TypeError("leaseStore is required");
     if (fallback) {
       const capability = fallback.capability;
@@ -42,24 +42,45 @@ export class Broker {
     this.idFactory = idFactory;
     this.maxAttempts = maxAttempts;
     this.auditLog = auditLog;
+    if (!Number.isInteger(maxPendingAuditWrites) || maxPendingAuditWrites < 1) throw new TypeError("maxPendingAuditWrites must be a positive integer");
+    this.maxPendingAuditWrites = maxPendingAuditWrites;
+    this.pendingAuditWrites = 0;
     this.logger = logger;
   }
 
-  #recordLease(lease) {
+  #logAudit(entry) {
+    try {
+      this.logger(entry);
+    } catch {}
+  }
+
+  #enqueueAuditWrite({ kind, id, write }) {
     if (!this.auditLog) return;
-    (async () => this.auditLog.recordLease(lease))().catch((error) => {
-      try {
-        this.logger({ event: "audit_write_failed", kind: "lease", leaseId: lease.leaseId, code: error?.code ?? error?.message });
-      } catch {}
+    if (this.pendingAuditWrites >= this.maxPendingAuditWrites) {
+      this.#logAudit({ event: "audit_write_dropped", kind, [`${kind}Id`]: id, code: "queue_full" });
+      return;
+    }
+    this.pendingAuditWrites += 1;
+    (async () => write())().catch((error) => {
+      this.#logAudit({ event: "audit_write_failed", kind, [`${kind}Id`]: id, code: error?.code ?? error?.message });
+    }).finally(() => {
+      this.pendingAuditWrites -= 1;
+    });
+  }
+
+  #recordLease(lease) {
+    this.#enqueueAuditWrite({
+      kind: "lease",
+      id: lease.leaseId,
+      write: () => this.auditLog.recordLease(lease)
     });
   }
 
   #recordMeter(meter) {
-    if (!this.auditLog) return;
-    (async () => this.auditLog.recordMeter(meter))().catch((error) => {
-      try {
-        this.logger({ event: "audit_write_failed", kind: "meter", meterId: meter.meterId, code: error?.code ?? error?.message });
-      } catch {}
+    this.#enqueueAuditWrite({
+      kind: "meter",
+      id: meter.meterId,
+      write: () => this.auditLog.recordMeter(meter)
     });
   }
 

@@ -3,9 +3,10 @@ import { createLocalOllamaGateway, localGatewayConfig } from "../gateway/local-o
 import { listenLocal } from "../gateway/server.js";
 import { createAuditLogFromEnv } from "../persistence/postgres-audit-log.js";
 
+let auditLog = null;
 try {
   const config = localGatewayConfig();
-  const auditLog = await createAuditLogFromEnv();
+  auditLog = await createAuditLogFromEnv();
   if (auditLog) console.log("FACF audit persistence enabled (DATABASE_URL set).");
   const server = createLocalOllamaGateway(config, {
     logger: ({ event, requestId, route, providerId, code, kind, leaseId, meterId }) =>
@@ -21,6 +22,7 @@ try {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 } catch (error) {
+  await auditLog?.pool.end().catch(() => {});
   console.error(error instanceof Error ? error.message : "FACF gateway startup failed");
   process.exitCode = 2;
 }

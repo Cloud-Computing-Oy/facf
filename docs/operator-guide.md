@@ -28,8 +28,10 @@ The reference implementation's Postgres audit log
 are released, and meter events, to two tables — `leases` and `meters` — for
 reconciliation and incident review. Writes are best-effort: a database failure
 is logged without failing or delaying the workload. Operators must not treat
-these tables as an immutable or exactly-once audit trail. Persistence is
-optional and inert until configured:
+these tables as an immutable or exactly-once audit trail. The broker allows at
+most 1,000 pending audit writes by default; further events are dropped with an
+`audit_write_dropped` log entry until capacity becomes available. Persistence
+is optional and inert until configured:
 
 1. Provision a Postgres instance and set `DATABASE_URL` (e.g.
    `postgres://user:password@host:5432/facf`) in the gateway process's
