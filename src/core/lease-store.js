@@ -48,6 +48,15 @@ export class LeaseStore {
   transition(leaseId, nextState) {
     const lease = this.#leases.get(leaseId);
     if (!lease) throw new LeaseConflictError(`unknown lease ${leaseId}`);
+    // Reconcile expiry before validating the transition: without this, work that
+    // finishes after the lease TTL could still move running -> completed and be
+    // permanently recorded as successful, since "completed" is a terminal state
+    // that later expiry reconciliation skips.
+    if (!FINAL_STATES.has(lease.state) && Date.parse(lease.expiresAt) <= this.clock().getTime()) {
+      lease.state = "expired";
+      this.#activeByOffer.delete(lease.offerId);
+      if (nextState === "expired") return structuredClone(lease);
+    }
     if (!TRANSITIONS[lease.state]?.has(nextState)) throw new LeaseConflictError(`invalid lease transition ${lease.state} -> ${nextState}`);
     lease.state = nextState;
     if (FINAL_STATES.has(nextState)) this.#activeByOffer.delete(lease.offerId);

@@ -30,3 +30,25 @@ test("expired lease frees the slot", () => {
   assert.equal(store.get(first.leaseId).state, "expired");
   assert.equal(second.state, "offered");
 });
+
+test("a lease that outlives its TTL cannot be completed", () => {
+  let now = new Date("2026-08-26T08:00:00.000Z");
+  const store = new LeaseStore({ clock: () => now, idFactory: () => "lease-1", ttlMs: 1000 });
+  const lease = store.acquire(workload(), offer());
+  store.transition(lease.leaseId, "accepted");
+  store.transition(lease.leaseId, "running");
+  now = new Date("2026-08-26T08:00:02.000Z");
+  assert.throws(() => store.transition(lease.leaseId, "completed"), LeaseConflictError);
+  assert.equal(store.get(lease.leaseId).state, "expired");
+});
+
+test("explicitly expiring a lease past its TTL is idempotent, not an error", () => {
+  let now = new Date("2026-08-26T08:00:00.000Z");
+  const store = new LeaseStore({ clock: () => now, idFactory: () => "lease-1", ttlMs: 1000 });
+  const lease = store.acquire(workload(), offer());
+  store.transition(lease.leaseId, "accepted");
+  store.transition(lease.leaseId, "running");
+  now = new Date("2026-08-26T08:00:02.000Z");
+  const result = store.transition(lease.leaseId, "expired");
+  assert.equal(result.state, "expired");
+});
