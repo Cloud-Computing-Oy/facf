@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://facf.dev/protocol/v0alpha1/result.schema.json",
+  "title": "FACF Workload Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "workloadId", "leaseId", "providerId", "status", "output", "completedAt"],
+  "properties": {
+    "protocolVersion": { "const": "v0alpha1" },
+    "workloadId": { "type": "string", "minLength": 1 },
+    "leaseId": { "type": "string", "minLength": 1 },
+    "providerId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["completed", "failed"] },
+    "output": { "type": "object" },
+    "errorCode": { "type": "string" },
+    "completedAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "v0alpha1",
+  "workloadId": "workload-demo-001",
+  "tenantId": "tenant-demo",
+  "model": "qwen2.5:7b",
+  "dataClass": "public",
+  "minimumTrustTier": "community",
+  "allowedRegions": ["FI", "EU"],
+  "maximumPriceEur": 0.05,
+  "timeoutMs": 5000,
+  "idempotencyKey": "demo-001",
+  "input": {
+    "messages": [{ "role": "user", "content": "Return a short public demo response." }]
+  }
+}

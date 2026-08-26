@@ -1,4 +1,4 @@
-name: Documentation
+name: Validate
 
 on:
   pull_request:
@@ -16,5 +16,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Validate documentation
-        run: node scripts/check-docs.mjs
+      - name: Run tests
+        run: npm test
+      - name: Validate repository artifacts
+        run: npm run check
+      - name: Run deterministic demo
+        run: npm run demo
