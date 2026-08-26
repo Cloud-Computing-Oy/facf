@@ -171,6 +171,14 @@ release or expiry. The 256-bit bearer token is scoped to one lease, workload,
 provider, model, and deadline and must never enter logs. The grant is not yet
 wired onto the mTLS channel or into remote runtime execution.
 
+Lease negotiation is now transported bidirectionally over the authenticated
+control connection. The broker sends a content-free request only to a currently
+active provider, correlates one bounded response, and revalidates the returned
+grant against the original lease binding. The agent uses its local lease
+authority and returns either the short-lived grant or a stable rejection code.
+Timeouts and disconnects fail closed. Prompt and result transport remains
+explicitly unimplemented.
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md).

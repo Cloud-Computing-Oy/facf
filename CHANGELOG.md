@@ -10,6 +10,8 @@
   primitives with strict identity, freshness, size, and expiry boundaries.
 - Add strict provider-side lease requests and short-lived, least-privilege
   execution grants with idempotency and local slot exclusion.
+- Carry lease requests and grant/rejection decisions bidirectionally over the
+  enrolled mTLS control channel with correlation, timeout, and binding checks.
 
 All notable project changes will be recorded here.
 
