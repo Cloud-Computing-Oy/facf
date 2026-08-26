@@ -1,0 +1,24 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Node.js
+        uses: actions/setup-node@1e60f620b9541dca1515407f7e2a1a8e38466c9c
+        with:
+          node-version: "22"
+      - name: Validate documentation
+        run: node scripts/check-docs.mjs

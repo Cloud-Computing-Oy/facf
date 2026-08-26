@@ -1,0 +1,139 @@
+# Broker–Agent Protocol
+
+## Status
+
+This document defines the intended contract. Machine-readable protobuf and
+OpenAPI schemas will be added in Phase 0. Normative requirements use MUST, MUST
+NOT, SHOULD, and MAY in their RFC 2119 sense.
+
+## Versioning
+
+- Every envelope MUST contain `protocol_version`.
+- Major versions are incompatible.
+- Unknown optional fields MUST be ignored.
+- Unknown message types MUST fail closed.
+- Capability negotiation MUST precede offers.
+
+## Identity
+
+Every agent and broker connection MUST be authenticated and encrypted. An
+`agent_id` identifies an enrolled software identity, not merely a hostname.
+Production identities SHOULD be short-lived and bound to node/workload evidence
+where available.
+
+## Envelope
+
+```json
+{
+  "protocol_version": "0.1",
+  "message_id": "01J...",
+  "sent_at": "2026-08-26T12:00:00Z",
+  "agent_id": "agent_fi_tampere_01",
+  "type": "capacity_offer",
+  "payload": {}
+}
+```
+
+Messages whose security depends on freshness MUST reject clock skew beyond the
+configured tolerance.
+
+## Capability Declaration
+
+```json
+{
+  "accelerators": [{
+    "vendor": "nvidia",
+    "model": "RTX_5060_LAPTOP",
+    "count": 1,
+    "memory_bytes": 8752062464
+  }],
+  "runtimes": [{"type": "ollama", "version": "0.33.0"}],
+  "models": [{
+    "id": "qwen2.5:7b",
+    "revision": "immutable-runtime-identifier",
+    "max_context_tokens": 4096,
+    "warm": true
+  }],
+  "trust_class": "community",
+  "regions": ["EU", "FI"]
+}
+```
+
+Self-reported hardware is not proof of hardware or trust class.
+
+## Capacity Offer
+
+```json
+{
+  "offer_id": "offer_01J...",
+  "valid_until": "2026-08-26T12:00:20Z",
+  "model_id": "qwen2.5:7b",
+  "free_slots": 1,
+  "max_input_tokens": 3072,
+  "max_output_tokens": 1024,
+  "estimated_ttft_ms": 1800,
+  "estimated_tokens_per_second": 18.5,
+  "price": {
+    "currency": "EUR",
+    "input_per_million": "0.10",
+    "output_per_million": "0.20"
+  }
+}
+```
+
+The broker MUST NOT schedule an expired offer. The agent MUST re-check local
+capacity when accepting a lease; an offer is not a reservation.
+
+## Lease Lifecycle
+
+```text
+requested -> offered -> accepted -> running -> completed
+                       |          |-> failed
+                       |          |-> cancelled
+                       |-> expired
+                       |-> rejected
+```
+
+Transitions MUST be idempotent by `lease_id` and monotonically versioned. Only
+one accepted lease may consume a slot. The agent is the local authority for that
+invariant; the broker is the network authority for assignment history.
+
+## Execution Grant
+
+After acceptance, the agent returns a short-lived, least-privilege grant scoped
+to one lease, runtime, model, and deadline. It MUST NOT permit administration or
+another workload.
+
+## Meter Statement
+
+```json
+{
+  "lease_id": "lease_01J...",
+  "observation_point": "provider",
+  "started_at": "2026-08-26T12:00:04Z",
+  "completed_at": "2026-08-26T12:00:09Z",
+  "input_tokens": 421,
+  "output_tokens": 96,
+  "first_token_ms": 1840,
+  "runtime_ms": 5220,
+  "model_revision": "immutable-runtime-identifier",
+  "result_digest": "sha256:...",
+  "signature": "base64url-signature"
+}
+```
+
+Statements are evidence, not unquestionable truth. The broker reconciles
+provider and gateway observations and flags material disagreement.
+
+## Liveness
+
+- Target heartbeat: every 10 seconds.
+- Offer lifetime: 30 seconds or less.
+- Missing heartbeats remove a node from new scheduling.
+- Liveness loss MUST NOT silently decide a running job's result.
+- The agent MUST enforce its deadline if the broker disappears.
+
+## Privacy
+
+Prompt and response bodies MUST NOT appear in control-plane messages, routine
+logs, or metrics. Data-plane handling follows the selected trust class.
