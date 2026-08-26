@@ -22,6 +22,7 @@ print("Scenario 1: eligible local provider", local);
 const unavailableProvider = new SimulatedProvider({ offer, failureCode: "runtime_unreachable", clock, idFactory });
 const fallback = {
   providerId: "cloud-fallback",
+  capability: { region: "EU", trustTier: "community", dataClasses: ["public", "synthetic"], maxPriceEur: 0.03 },
   async execute() {
     return { text: "Executed through bounded cloud fallback.", usage: { inputTokens: 12, outputTokens: 8 }, priceEur: 0.02 };
   }
