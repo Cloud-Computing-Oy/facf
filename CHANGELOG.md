@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add optional Postgres audit persistence for completed/failed leases and
+  meter events, off by default and requiring no new mandatory dependency.
 - Add a local-only OpenAI-compatible chat-completions gateway with bounded
   request translation, JSON and SSE response modes, safe errors, and tests.
 - Add an explicitly enabled runnable local Ollama gateway that wires the broker,
