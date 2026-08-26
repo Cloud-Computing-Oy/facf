@@ -120,6 +120,19 @@ acceptance criteria are preserved in the
 Current local execution evidence and its limitations are recorded in
 [`Phase 0 verification`](docs/phase-0-verification.md).
 
+## Phase 1 local gateway slice
+
+The repository also contains the first bounded Phase 1 component: a local-only
+OpenAI-compatible `POST /v1/chat/completions` gateway over the existing broker.
+It supports JSON responses and SSE-compatible completed-result delivery, pins
+tenant, region, trust, price, and data-class policy on the server, and binds to
+`127.0.0.1` by default through `listenLocal()`.
+
+This is an embeddable alpha module, not a remotely deployable service. It has no
+authentication or mTLS, does not yet stream tokens incrementally from the
+runtime, and must not be exposed to a LAN or the public internet. See the
+[`Phase 1 local gateway spec`](agent-os/specs/2026-08-26-1630-phase-1-local-gateway/plan.md).
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md).
