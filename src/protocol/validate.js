@@ -95,6 +95,7 @@ export function validateOffer(value) {
 export function validateCapability(value) {
   const issues = [];
   if (!object(value, "capability", issues)) finish("capability", issues);
+  exactKeys(value, ["protocolVersion", "providerId", "capabilityId", "models", "runtime", "region", "trustTier", "slots", "expiresAt"], issues);
   version(value.protocolVersion, issues);
   for (const key of ["providerId", "capabilityId", "region"]) text(value[key], key, issues);
   stringArray(value.models, "models", issues);
@@ -152,6 +153,7 @@ function inspectMeterMetadata(value, path, issues) {
 export function validateMeter(value) {
   const issues = [];
   if (!object(value, "meter", issues)) finish("meter", issues);
+  exactKeys(value, ["protocolVersion", "meterId", "workloadId", "leaseId", "providerId", "startedAt", "completedAt", "durationMs", "inputTokens", "outputTokens", "priceEur", "outcome", "metadata"], issues);
   version(value.protocolVersion, issues);
   for (const key of ["meterId", "workloadId", "leaseId", "providerId"]) text(value[key], key, issues);
   for (const key of ["startedAt", "completedAt"]) date(value[key], key, issues);
