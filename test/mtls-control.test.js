@@ -88,6 +88,23 @@ test("an oversized control message closes the connection without crashing the se
   assert.ok(events.some((event) => event.event === "control_socket_error"));
 });
 
+test("a malformed message from the broker does not crash the connecting agent", async (t) => {
+  const certificates = testCertificates();
+  t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
+  const rawServer = tls.createServer({ key: certificates.serverKey, cert: certificates.serverCert, ca: certificates.ca, requestCert: true, rejectUnauthorized: true, minVersion: "TLSv1.3" }, (socket) => {
+    socket.on("secureConnect", () => {});
+    socket.write("not json\n");
+  });
+  await new Promise((resolve, reject) => { rawServer.once("error", reject); rawServer.listen(0, "127.0.0.1", resolve); });
+  t.after(() => rawServer.close());
+  const capability = { protocolVersion: "v0alpha1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], runtime: "ollama", region: "FI", trustTier: "community", slots: 1, expiresAt: new Date().toISOString() };
+  const events = [];
+  const socket = connectControlAgent({ host: "127.0.0.1", port: rawServer.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, heartbeatMs: 10000, logger: (event) => events.push(event) });
+  t.after(() => socket.destroy());
+  await new Promise((resolve) => socket.once("close", resolve));
+  assert.ok(events.some((event) => event.event === "control_socket_error"));
+});
+
 function nextLine(socket) {
   return new Promise((resolve, reject) => {
     let data = "";

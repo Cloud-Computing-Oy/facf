@@ -70,9 +70,13 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
   return server;
 }
 
-export function connectControlAgent({ host, port, servername, key, cert, ca, agentId, capability, leaseAuthority = null, heartbeatMs = 10000, clock = () => new Date(), idFactory = randomUUID } = {}) {
+export function connectControlAgent({ host, port, servername, key, cert, ca, agentId, capability, leaseAuthority = null, heartbeatMs = 10000, clock = () => new Date(), idFactory = randomUUID, logger = () => {} } = {}) {
   if (!host || !port || !servername || !key || !cert || !ca || !agentId || !capability) throw new TypeError("complete mTLS agent configuration is required");
   const socket = tls.connect({ host, port, servername, key, cert, ca, rejectUnauthorized: true, minVersion: "TLSv1.3" });
+  // Same crash risk as the server's accepted socket: without this listener, an
+  // unhandled 'error' event (including our own socket.destroy(err) below on a
+  // malformed broker message) takes down the whole agent process.
+  socket.on("error", (error) => logger({ event: "control_socket_error", code: error.code ?? error.message }));
   const send = () => socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", messageId: idFactory(), sentAt: clock().toISOString(), agentId, type: "capability", payload: { ...capability, expiresAt: new Date(clock().getTime() + Math.min(heartbeatMs * 2, 30000)).toISOString() } })}\n`);
   socket.once("secureConnect", send);
   let buffered = "";
