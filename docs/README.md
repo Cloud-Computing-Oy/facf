@@ -6,6 +6,7 @@
 - [Roadmap](../agent-os/product/roadmap.md)
 - [Technology stack](../agent-os/product/tech-stack.md)
 - [MVP scope](mvp-scope.md)
+- [Phase 0 verification](phase-0-verification.md)
 - [Commercial strategy](commercial-strategy.md)
 - [Control and defensibility](control-and-defensibility.md)
 - [Economics and metering](economics.md)

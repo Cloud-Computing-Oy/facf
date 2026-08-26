@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://facf.dev/protocol/v0alpha1/meter.schema.json",
+  "title": "FACF Meter Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "meterId", "workloadId", "leaseId", "providerId", "startedAt", "completedAt", "durationMs", "inputTokens", "outputTokens", "priceEur", "outcome", "metadata"],
+  "properties": {
+    "protocolVersion": { "const": "v0alpha1" },
+    "meterId": { "type": "string", "minLength": 1 },
+    "workloadId": { "type": "string", "minLength": 1 },
+    "leaseId": { "type": "string", "minLength": 1 },
+    "providerId": { "type": "string", "minLength": 1 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "inputTokens": { "type": "integer", "minimum": 0 },
+    "outputTokens": { "type": "integer", "minimum": 0 },
+    "priceEur": { "type": "number", "minimum": 0 },
+    "outcome": { "enum": ["completed", "failed", "fallback"] },
+    "metadata": { "type": "object" }
+  }
+}

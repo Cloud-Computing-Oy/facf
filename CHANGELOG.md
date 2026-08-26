@@ -4,6 +4,16 @@ All notable project changes will be recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- v0alpha1 workload, capability, offer, lease, result, and meter schemas;
+- deterministic policy-aware provider ranking and atomic in-memory leases;
+- simulated provider execution, privacy-safe metering, and bounded fallback;
+- an Ollama chat/provider boundary, explicit-consent live smoke test, and
+  reproducible two-scenario deterministic demo;
+- Node.js tests for policy, state transitions, retries, fallback, telemetry, and
+  runtime error handling.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added

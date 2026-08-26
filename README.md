@@ -9,8 +9,10 @@ inference requests or asynchronous jobs to one provider cell at a time. It does
 not attempt to stretch a single Kubernetes cluster or GPU tensor-parallel job
 across the public internet.
 
-> **Project status: specification and closed-pilot design.** No production
-> network, token, marketplace, or confidentiality guarantee exists yet.
+> **Project status: Phase 0 protocol and deterministic simulator.** The
+> repository includes executable scheduling, lease, provider, metering, Ollama
+> adapter, and fallback boundaries. No production network, token, marketplace,
+> or confidentiality guarantee exists yet.
 
 ## Why FACF?
 
@@ -83,6 +85,40 @@ pattern into an open, multi-provider protocol.
 
 See [Product Roadmap](agent-os/product/roadmap.md) and
 [MVP Scope](docs/mvp-scope.md).
+
+## Run the Phase 0 simulator
+
+Node.js 22 or newer is required. There are no runtime package dependencies.
+
+```bash
+npm test
+npm run check
+npm run demo
+```
+
+The demo executes one whole workload on a laptop-style simulated provider and
+then demonstrates bounded cloud fallback after a simulated provider failure.
+It never connects to a real provider or cloud account.
+
+An explicitly authorized local Ollama smoke test is also available. It accepts
+only the built-in synthetic prompt and refuses to run without the consent flag:
+
+```bash
+FACF_LIVE_DEMO=1 \
+FACF_OLLAMA_MODEL=qwen2.5:7b \
+FACF_OLLAMA_URL=http://127.0.0.1:11434 \
+npm run demo:live
+```
+
+Do not point the alpha adapter at an untrusted endpoint or use it for sensitive
+data. Remote-provider identity and mTLS are Phase 1 work.
+
+Machine-readable alpha contracts are in
+[`protocol/v0alpha1`](protocol/v0alpha1/README.md). The implementation plan and
+acceptance criteria are preserved in the
+[`Phase 0 spec`](agent-os/specs/2026-08-26-1113-phase-0-protocol-simulator/plan.md).
+Current local execution evidence and its limitations are recorded in
+[`Phase 0 verification`](docs/phase-0-verification.md).
 
 ## Documentation
 
