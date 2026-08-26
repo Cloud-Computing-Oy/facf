@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { connectControlAgent, createMtlsControlServer } from "../src/control/mtls-control.js";
 import { ProviderRegistry } from "../src/control/provider-registry.js";
+import { AgentLeaseAuthority } from "../src/control/agent-lease-authority.js";
 
 test("outbound mTLS agent heartbeat is authenticated and enrolled", async (t) => {
   const certificates = testCertificates();
@@ -37,6 +38,37 @@ test("CA-valid agent still fails closed when it is not enrolled", async (t) => {
   assert.equal(reply.type, "error");
   assert.equal(reply.code, "agent_not_enrolled");
   assert.deepEqual(registry.getActive(), []);
+});
+
+test("broker negotiates a bound grant over the enrolled mTLS connection", async (t) => {
+  const certificates = testCertificates();
+  t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
+  const registry = new ProviderRegistry({ enrollments: [{ agentId: "agent-1", providerId: "provider-1" }] });
+  const server = createMtlsControlServer({ key: certificates.serverKey, cert: certificates.serverCert, ca: certificates.ca, registry });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  t.after(() => server.close());
+  const capability = { protocolVersion: "v0alpha1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], runtime: "ollama", region: "FI", trustTier: "community", slots: 1, expiresAt: new Date().toISOString() };
+  const leaseAuthority = new AgentLeaseAuthority({ providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"] });
+  const socket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, heartbeatMs: 10000 });
+  t.after(() => socket.destroy());
+  await nextLine(socket);
+  const issuedAt = new Date();
+  const leaseRequest = { protocolVersion: "v0alpha1", leaseId: "lease-remote-1", workloadId: "work-public-1", providerId: "provider-1", capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 20000).toISOString() };
+  const grant = await server.requestLease("provider-1", leaseRequest, { timeoutMs: 2000, idFactory: () => "lease-message-1" });
+  assert.equal(grant.leaseId, "lease-remote-1");
+  assert.equal(grant.scope, "execute:model");
+  assert.equal(leaseAuthority.authorize({ leaseId: grant.leaseId, token: grant.token, model: grant.model }), true);
+  await assert.rejects(server.requestLease("provider-1", { ...leaseRequest, leaseId: "lease-remote-2", workloadId: "work-public-2" }, { timeoutMs: 2000 }), (error) => error.code === "capacity_unavailable");
+});
+
+test("broker refuses a lease for an inactive provider", async (t) => {
+  const certificates = testCertificates();
+  t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
+  const registry = new ProviderRegistry({ enrollments: [{ agentId: "agent-1", providerId: "provider-1" }] });
+  const server = createMtlsControlServer({ key: certificates.serverKey, cert: certificates.serverCert, ca: certificates.ca, registry });
+  const issuedAt = new Date();
+  const request = { protocolVersion: "v0alpha1", leaseId: "lease-1", workloadId: "work-1", providerId: "provider-1", capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 20000).toISOString() };
+  await assert.rejects(server.requestLease("provider-1", request), (error) => error.code === "provider_inactive");
 });
 
 function nextLine(socket) {
