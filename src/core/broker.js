@@ -11,6 +11,19 @@ export class NoEligibleProviderError extends Error {
   }
 }
 
+// workload.timeoutMs is validated but was never enforced anywhere: a hung provider,
+// simulator, or fallback previously blocked retries and fallback indefinitely.
+function withTimeout(promise, timeoutMs, code) {
+  promise.catch(() => {});
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error("workload execution timed out"), { code })), timeoutMs);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
 export class Broker {
   constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2 } = {}) {
     if (!leaseStore) throw new TypeError("leaseStore is required");
@@ -38,6 +51,13 @@ export class Broker {
     for (const candidate of ranking.eligible) {
       if (attempt >= this.maxAttempts) break;
       attempt += 1;
+      // Eligibility (including offer expiry) was computed once at the start of run();
+      // an earlier attempt can take long enough for a later candidate's offer to have
+      // expired by the time we get to it, so recheck immediately before acquiring it.
+      if (Date.parse(candidate.offer.expiresAt) <= this.clock().getTime()) {
+        failures.push({ providerId: candidate.offer.providerId, code: "offer_expired" });
+        continue;
+      }
       let lease;
       try {
         lease = this.leaseStore.acquire(workload, candidate.offer, attempt);
@@ -45,7 +65,7 @@ export class Broker {
         lease = this.leaseStore.transition(lease.leaseId, "running");
         const provider = providers.get(candidate.offer.providerId);
         if (!provider) throw new Error("provider_not_connected");
-        const execution = await provider.execute({ workload, lease });
+        const execution = await withTimeout(provider.execute({ workload, lease }), workload.timeoutMs, "execution_timeout");
         this.leaseStore.transition(lease.leaseId, "completed");
         return { route: "facf", providerId: candidate.offer.providerId, lease: this.leaseStore.get(lease.leaseId), ...execution, ranking };
       } catch (error) {
@@ -75,7 +95,7 @@ export class Broker {
       throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code }]);
     }
     const startedAt = this.clock();
-    const response = await this.fallback.execute(workload);
+    const response = await withTimeout(this.fallback.execute(workload), workload.timeoutMs, "fallback_execution_timeout");
     if (!Number.isFinite(response.priceEur) || response.priceEur < 0 || response.priceEur > workload.maximumPriceEur) {
       throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code: "fallback_price_not_allowed" }]);
     }

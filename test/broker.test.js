@@ -106,3 +106,40 @@ test("broker rejects a fallback whose declared price ceiling exceeds the workloa
   });
   assert.equal(executed, false);
 });
+
+test("broker enforces the workload timeout against a hung provider", async () => {
+  const idFactory = ids();
+  const provider = { execute: () => new Promise(() => {}) };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, maxAttempts: 1 });
+  await assert.rejects(() => broker.run(workload({ timeoutMs: 100 }), [offer()], new Map([["provider-1", provider]])), (error) => {
+    assert.ok(error instanceof NoEligibleProviderError);
+    assert.equal(error.rejected.at(-1).code, "execution_timeout");
+    return true;
+  });
+});
+
+test("broker enforces the workload timeout against a hung fallback", async () => {
+  const idFactory = ids();
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"] }, execute: () => new Promise(() => {}) };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory });
+  await assert.rejects(() => broker.run(workload({ timeoutMs: 100 }), [], new Map()), (error) => error.code === "fallback_execution_timeout");
+});
+
+test("broker rechecks offer expiry before acquiring a later retry candidate", async () => {
+  const idFactory = ids();
+  let advanced = false;
+  const clock = () => (advanced ? new Date("2026-08-26T08:00:10.000Z") : new Date("2026-08-26T08:00:00.000Z"));
+  const firstOffer = offer({ offerId: "offer-a", providerId: "provider-a", qualityScore: 1, expiresAt: "2099-01-01T00:00:00.000Z" });
+  const secondOffer = offer({ offerId: "offer-b", providerId: "provider-b", qualityScore: 0.8, expiresAt: "2026-08-26T08:00:05.000Z" });
+  const first = { execute: async () => { advanced = true; throw Object.assign(new Error("unreachable"), { code: "runtime_unreachable" }); } };
+  const second = { execute: async () => { throw new Error("should not be called: offer already expired"); } };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock, idFactory }), clock, idFactory });
+  await assert.rejects(() => broker.run(workload(), [firstOffer, secondOffer], new Map([["provider-a", first], ["provider-b", second]])), (error) => {
+    assert.ok(error instanceof NoEligibleProviderError);
+    assert.deepEqual(error.rejected.slice(-2), [
+      { providerId: "provider-a", code: "runtime_unreachable" },
+      { providerId: "provider-b", code: "offer_expired" }
+    ]);
+    return true;
+  });
+});

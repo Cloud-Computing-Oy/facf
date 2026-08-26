@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const required = [
@@ -53,7 +53,7 @@ for (const file of walk(root).filter((path) => extname(path) === ".md")) {
     if (!pathPart) continue;
     const target = normalize(resolve(dirname(file), pathPart));
     const display = relative(root, file);
-    if (!target.startsWith(`${root}/`) && target !== root) {
+    if (!target.startsWith(`${root}${sep}`) && target !== root) {
       failures.push(`${display}: link escapes repository: ${rawTarget}`);
     } else if (!existsSync(target)) {
       failures.push(`${display}: missing link target: ${rawTarget}`);
