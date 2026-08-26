@@ -36,7 +36,7 @@ test("broker retries another eligible provider after execution failure", async (
 test("broker uses bounded cloud fallback and emits fallback meter", async () => {
   const idFactory = ids();
   const provider = new SimulatedProvider({ offer: offer(), failureCode: "runtime_unreachable", clock: fixedClock, idFactory });
-  const fallback = { providerId: "cloud", async execute() { return { text: "cloud result", usage: { inputTokens: 1, outputTokens: 2 }, priceEur: 0.02 }; } };
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"] }, async execute() { return { text: "cloud result", usage: { inputTokens: 1, outputTokens: 2 }, priceEur: 0.02 }; } };
   const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory });
   const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
   assert.equal(execution.route, "fallback");
@@ -52,11 +52,57 @@ test("broker fails closed when no eligible provider or fallback exists", async (
 
 test("fallback cannot exceed the workload price ceiling", async () => {
   const idFactory = ids();
-  const fallback = { providerId: "cloud", async execute() { return { text: "expensive", usage: {}, priceEur: 1 }; } };
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"] }, async execute() { return { text: "expensive", usage: {}, priceEur: 1 }; } };
   const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory });
   await assert.rejects(() => broker.run(workload(), [], new Map()), (error) => {
     assert.ok(error instanceof NoEligibleProviderError);
     assert.equal(error.rejected.at(-1).code, "fallback_price_not_allowed");
     return true;
   });
+});
+
+test("broker requires fallback capability metadata to authorize fallback routing", () => {
+  const idFactory = ids();
+  const fallback = { providerId: "cloud", async execute() { return { text: "unchecked", usage: {}, priceEur: 0.01 }; } };
+  assert.throws(() => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory }), TypeError);
+});
+
+test("broker rejects a fallback with a non-finite declared price ceiling", () => {
+  const idFactory = ids();
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"], maxPriceEur: Number.NaN }, async execute() { return { text: "unchecked", usage: {}, priceEur: 0.01 }; } };
+  assert.throws(() => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory }), TypeError);
+});
+
+test("broker rejects a fallback that fails workload policy without ever invoking execute", async () => {
+  const idFactory = ids();
+  let executed = false;
+  const fallback = {
+    providerId: "cloud",
+    capability: { region: "FI", trustTier: "community", dataClasses: ["confidential"] },
+    async execute() { executed = true; return { text: "should not run", usage: {}, priceEur: 0.01 }; }
+  };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory });
+  await assert.rejects(() => broker.run(workload(), [], new Map()), (error) => {
+    assert.ok(error instanceof NoEligibleProviderError);
+    assert.equal(error.rejected.at(-1).code, "fallback_data_class_not_allowed");
+    return true;
+  });
+  assert.equal(executed, false);
+});
+
+test("broker rejects a fallback whose declared price ceiling exceeds the workload budget without invoking execute", async () => {
+  const idFactory = ids();
+  let executed = false;
+  const fallback = {
+    providerId: "cloud",
+    capability: { region: "FI", trustTier: "community", dataClasses: ["public"], maxPriceEur: 1 },
+    async execute() { executed = true; return { text: "should not run", usage: {}, priceEur: 0.01 }; }
+  };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory });
+  await assert.rejects(() => broker.run(workload(), [], new Map()), (error) => {
+    assert.ok(error instanceof NoEligibleProviderError);
+    assert.equal(error.rejected.at(-1).code, "fallback_price_not_allowed");
+    return true;
+  });
+  assert.equal(executed, false);
 });
