@@ -1,0 +1,17 @@
+{
+  "name": "@cloud-computing-oy/facf",
+  "version": "0.2.0-alpha.0",
+  "private": true,
+  "description": "FACF Phase 0 protocol fixtures and deterministic compute-fabric simulator",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "node scripts/check-docs.mjs && node scripts/check-protocol.mjs",
+    "demo": "node src/cli/demo.js",
+    "demo:live": "node src/cli/live-ollama-demo.js",
+    "test": "node --test"
+  },
+  "license": "Apache-2.0"
+}

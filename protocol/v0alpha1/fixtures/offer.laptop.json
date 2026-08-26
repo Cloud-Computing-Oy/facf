@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "v0alpha1",
+  "offerId": "offer-laptop-001",
+  "providerId": "provider-laptop",
+  "capabilityId": "capability-laptop-001",
+  "models": ["qwen2.5:7b"],
+  "region": "FI",
+  "trustTier": "community",
+  "dataClasses": ["public", "synthetic"],
+  "availableSlots": 1,
+  "priceEur": 0.01,
+  "estimatedLatencyMs": 250,
+  "qualityScore": 0.9,
+  "expiresAt": "2099-01-01T00:00:00.000Z"
+}

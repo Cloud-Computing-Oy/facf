@@ -1,10 +1,18 @@
 # Broker–Agent Protocol
 
+## Executable alpha contracts
+
+The first machine-readable contracts are published under
+[`protocol/v0alpha1`](../protocol/v0alpha1/README.md). They cover workloads,
+capabilities, offers, leases, results, and meter events. The alpha version is a
+conformance and simulation surface; it has no backward-compatibility promise
+before `v1`.
+
 ## Status
 
-This document defines the intended contract. Machine-readable protobuf and
-OpenAPI schemas will be added in Phase 0. Normative requirements use MUST, MUST
-NOT, SHOULD, and MAY in their RFC 2119 sense.
+This document defines the intended contract. JSON Schema contracts exist for
+Phase 0; protobuf and OpenAPI surfaces remain future work. Normative requirements
+use MUST, MUST NOT, SHOULD, and MAY in their RFC 2119 sense.
 
 ## Versioning
 

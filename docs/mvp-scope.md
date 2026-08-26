@@ -1,5 +1,12 @@
 # Closed Inference MVP Scope
 
+## Current milestone
+
+Phase 0 now has an executable deterministic simulator and v0alpha1 protocol
+fixtures. This milestone validates whole-workload selection, lease exclusion,
+provider failure, and cloud fallback semantics locally. It does not satisfy the
+closed inference MVP or any production-readiness gate.
+
 ## Objective
 
 Demonstrate that complete, non-sensitive LLM inference requests can be routed

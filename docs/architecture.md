@@ -1,5 +1,14 @@
 # Architecture
 
+## Implementation status
+
+The repository currently implements a dependency-free Phase 0 simulator in
+Node.js. It includes deterministic policy filtering and scoring, an in-memory
+lease state machine, simulated whole-workload providers, privacy-safe meter
+events, an Ollama HTTP adapter boundary, and bounded fallback orchestration.
+Production identity, transport, persistence, event delivery, and billing remain
+Phase 1 or later work.
+
 ## Design Boundary
 
 FACF federates autonomous provider cells. The WAN control plane selects a cell
