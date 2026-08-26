@@ -24,6 +24,14 @@ export function createGatewayServer({ broker, offers, providers, policy = {}, lo
     try {
       if (request.method === "GET" && request.url === "/healthz") return sendJson(response, 200, { status: "ok" });
       if (request.method !== "POST" || request.url !== "/v1/chat/completions") return sendError(response, 404, "not_found", "route not found");
+      // A hostile webpage in the operator's browser can reach this loopback server
+      // directly; a CORS-safelisted Content-Type (e.g. text/plain) skips the CORS
+      // preflight, and DNS rebinding can point an attacker-controlled hostname at
+      // 127.0.0.1. Rejecting anything but a literal loopback Host header and a
+      // real application/json Content-Type closes both paths to triggering inference.
+      if (!isTrustedHost(request.headers.host, request.socket.localPort)) return sendError(response, 400, "untrusted_host", "request host is not trusted");
+      const contentType = request.headers["content-type"] ?? "";
+      if (!contentType.toLowerCase().startsWith("application/json")) return sendError(response, 415, "unsupported_media_type", "content-type must be application/json");
       const body = await readJson(request, effectivePolicy.maxBodyBytes);
       const workload = toWorkload(body, effectivePolicy);
       const availableOffers = typeof offers === "function" ? offers() : offers;
@@ -47,6 +55,24 @@ export function listenLocal(server, { host = "127.0.0.1", port = 8787 } = {}) {
     server.once("error", reject);
     server.listen(port, host, () => resolve(server.address()));
   });
+}
+
+function isTrustedHost(header, expectedPort) {
+  if (typeof header !== "string") return false;
+  let hostname;
+  let portPart;
+  if (header.startsWith("[")) {
+    const end = header.indexOf("]");
+    if (end === -1) return false;
+    hostname = header.slice(0, end + 1);
+    portPart = header.slice(end + 2);
+  } else {
+    const at = header.lastIndexOf(":");
+    if (at === -1) return false;
+    hostname = header.slice(0, at);
+    portPart = header.slice(at + 1);
+  }
+  return (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]") && portPart === String(expectedPort);
 }
 
 async function readJson(request, limit) {

@@ -36,6 +36,7 @@ test("runnable gateway completes a synthetic request through Ollama", async (t) 
   t.after(() => server.close());
   const response = await fetch(`http://127.0.0.1:${address.port}/v1/chat/completions`, {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: "qwen2.5:7b", messages: [{ role: "user", content: "synthetic test" }], facf: { data_class: "synthetic" } })
   });
   assert.equal(response.status, 200);
