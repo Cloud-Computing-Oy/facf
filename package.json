@@ -9,10 +9,14 @@
   },
   "scripts": {
     "check": "node scripts/check-docs.mjs && node scripts/check-protocol.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
     "demo": "node src/cli/demo.js",
     "demo:live": "node src/cli/live-ollama-demo.js",
     "gateway:local": "node src/cli/local-gateway.js",
     "test": "node --test"
+  },
+  "optionalDependencies": {
+    "pg": "^8.13.0"
   },
   "license": "Apache-2.0"
 }
