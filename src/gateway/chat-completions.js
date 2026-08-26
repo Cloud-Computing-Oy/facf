@@ -24,9 +24,19 @@ export function toWorkload(body, policy, idFactory = randomUUID) {
   });
   const dataClass = body.facf?.data_class ?? policy.dataClass;
   if (!ALLOWED_DATA_CLASSES.has(dataClass) || !policy.dataClasses.includes(dataClass)) throw new GatewayRequestError("data_class_not_allowed", "data class is not allowed", 403);
+  // Reject malformed/excessive generation options at the gateway boundary, using the
+  // same bounds the Ollama provider enforces downstream — otherwise a bad value only
+  // fails after a lease is already acquired, wasting the attempt and returning a
+  // misleading 503 instead of a clear 400.
   const options = {};
-  if (body.max_tokens !== undefined) options.num_predict = body.max_tokens;
-  if (body.temperature !== undefined) options.temperature = body.temperature;
+  if (body.max_tokens !== undefined) {
+    if (!Number.isInteger(body.max_tokens) || body.max_tokens < 1 || body.max_tokens > 256) throw new GatewayRequestError("invalid_options", "max_tokens must be an integer between 1 and 256");
+    options.num_predict = body.max_tokens;
+  }
+  if (body.temperature !== undefined) {
+    if (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2) throw new GatewayRequestError("invalid_options", "temperature must be a number between 0 and 2");
+    options.temperature = body.temperature;
+  }
   return {
     protocolVersion: "v0alpha1",
     workloadId: idFactory(),
