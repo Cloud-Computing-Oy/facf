@@ -1,0 +1,3 @@
+{
+  "protocolVersion": "v0alpha1", "grantId": "grant-local-1", "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "leaseId": "lease-local-1", "workloadId": "workload-public-1", "providerId": "provider-laptop-1", "model": "qwen2.5:7b", "scope": "execute:model", "issuedAt": "2026-08-26T14:00:00.000Z", "expiresAt": "2026-08-26T14:00:20.000Z"
+}
