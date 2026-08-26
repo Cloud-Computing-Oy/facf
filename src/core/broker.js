@@ -47,14 +47,14 @@ export class Broker {
 
   #recordLease(lease) {
     if (!this.auditLog) return;
-    Promise.resolve(this.auditLog.recordLease(lease)).catch((error) =>
+    (async () => this.auditLog.recordLease(lease))().catch((error) =>
       this.logger({ event: "audit_write_failed", kind: "lease", leaseId: lease.leaseId, code: error?.code ?? error?.message })
     );
   }
 
   #recordMeter(meter) {
     if (!this.auditLog) return;
-    Promise.resolve(this.auditLog.recordMeter(meter)).catch((error) =>
+    (async () => this.auditLog.recordMeter(meter))().catch((error) =>
       this.logger({ event: "audit_write_failed", kind: "meter", meterId: meter.meterId, code: error?.code ?? error?.message })
     );
   }

@@ -218,3 +218,19 @@ test("broker never throws or blocks the response when the audit log write fails"
   assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "lease"));
   assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "meter"));
 });
+
+test("broker never throws or blocks the response when the audit log throws synchronously", async () => {
+  const idFactory = ids();
+  const auditLog = {
+    recordLease(lease) { throw new Error("sync boom"); },
+    recordMeter(meter) { throw new Error("sync boom"); }
+  };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog, logger: (entry) => logged.push(entry) });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "lease"));
+  assert.ok(logged.some((entry) => entry.event === "audit_write_failed" && entry.kind === "meter"));
+});
