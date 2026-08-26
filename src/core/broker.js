@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rankOffers } from "./scheduler.js";
+import { evaluatePolicy, rankOffers } from "./scheduler.js";
 import { LeaseConflictError } from "./lease-store.js";
 import { validateMeter, validateWorkload } from "../protocol/validate.js";
 
@@ -14,6 +14,12 @@ export class NoEligibleProviderError extends Error {
 export class Broker {
   constructor({ leaseStore, fallback = null, clock = () => new Date(), idFactory = randomUUID, maxAttempts = 2 } = {}) {
     if (!leaseStore) throw new TypeError("leaseStore is required");
+    if (fallback) {
+      const capability = fallback.capability;
+      if (!capability || typeof capability.region !== "string" || typeof capability.trustTier !== "string" || !Array.isArray(capability.dataClasses)) {
+        throw new TypeError("fallback.capability with region, trustTier, and dataClasses is required to authorize fallback routing");
+      }
+    }
     this.leaseStore = leaseStore;
     this.fallback = fallback;
     this.clock = clock;
@@ -54,6 +60,17 @@ export class Broker {
   }
 
   async #runFallback(workload, ranking, failures) {
+    const capability = this.fallback.capability;
+    const reasons = evaluatePolicy(workload, {
+      region: capability.region,
+      trustTier: capability.trustTier,
+      dataClasses: capability.dataClasses,
+      priceEur: capability.maxPriceEur
+    });
+    if (reasons.length > 0) {
+      const code = reasons.includes("price_exceeds_budget") ? "fallback_price_not_allowed" : `fallback_${reasons[0]}`;
+      throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code }]);
+    }
     const startedAt = this.clock();
     const response = await this.fallback.execute(workload);
     if (!Number.isFinite(response.priceEur) || response.priceEur < 0 || response.priceEur > workload.maximumPriceEur) {

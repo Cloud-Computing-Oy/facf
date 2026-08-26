@@ -14,6 +14,10 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
   const pending = new Map();
   const server = tls.createServer({ key, cert, ca, requestCert: true, rejectUnauthorized: true, minVersion: "TLSv1.3" }, (socket) => {
     let connectedProviderId;
+    // Without this listener, Node treats socket.destroy(err) (and any other socket
+    // error) as an unhandled 'error' event and crashes the process — letting any
+    // CA-trusted client take down the control server with one bad message.
+    socket.on("error", (error) => logger({ event: "control_socket_error", providerId: connectedProviderId, code: error.code ?? error.message }));
     socket.setTimeout(idleTimeoutMs, () => socket.destroy());
     let buffered = "";
     socket.setEncoding("utf8");

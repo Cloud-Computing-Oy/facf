@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import tls from "node:tls";
 import test from "node:test";
 import { connectControlAgent, createMtlsControlServer } from "../src/control/mtls-control.js";
 import { ProviderRegistry } from "../src/control/provider-registry.js";
@@ -69,6 +70,22 @@ test("broker refuses a lease for an inactive provider", async (t) => {
   const issuedAt = new Date();
   const request = { protocolVersion: "v0alpha1", leaseId: "lease-1", workloadId: "work-1", providerId: "provider-1", capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 20000).toISOString() };
   await assert.rejects(server.requestLease("provider-1", request), (error) => error.code === "provider_inactive");
+});
+
+test("an oversized control message closes the connection without crashing the server", async (t) => {
+  const certificates = testCertificates();
+  t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
+  const registry = new ProviderRegistry({ enrollments: [{ agentId: "agent-1", providerId: "provider-1" }] });
+  const events = [];
+  const server = createMtlsControlServer({ key: certificates.serverKey, cert: certificates.serverCert, ca: certificates.ca, registry, maxMessageBytes: 16, logger: (event) => events.push(event) });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  t.after(() => server.close());
+  const socket = tls.connect({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, rejectUnauthorized: true, minVersion: "TLSv1.3" });
+  t.after(() => socket.destroy());
+  await new Promise((resolve, reject) => { socket.once("secureConnect", resolve); socket.once("error", reject); });
+  socket.write("x".repeat(64));
+  await new Promise((resolve) => socket.once("close", resolve));
+  assert.ok(events.some((event) => event.event === "control_socket_error"));
 });
 
 function nextLine(socket) {
