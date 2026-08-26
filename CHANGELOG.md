@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add a local-only OpenAI-compatible chat-completions gateway with bounded
+  request translation, JSON and SSE response modes, safe errors, and tests.
+
 All notable project changes will be recorded here.
 
 ## [Unreleased]
