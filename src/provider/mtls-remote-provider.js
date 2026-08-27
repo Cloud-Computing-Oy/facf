@@ -15,7 +15,9 @@ export class MtlsRemoteProvider {
   advertise() { return structuredClone(this.offer); }
 
   async execute({ workload, lease }) {
-    const remainingMs = Date.parse(lease.expiresAt) - this.clock().getTime();
+    const startedAtMs = this.clock().getTime();
+    const deadlineMs = Math.min(Date.parse(lease.expiresAt), startedAtMs + workload.timeoutMs);
+    const remainingMs = deadlineMs - startedAtMs;
     if (remainingMs <= 0) throw Object.assign(new Error("remote lease expired before negotiation"), { code: "lease_expired" });
     const grant = await this.controlServer.requestLease(this.offer.providerId, {
       protocolVersion: "v0alpha1",
@@ -27,12 +29,14 @@ export class MtlsRemoteProvider {
       issuedAt: lease.issuedAt,
       expiresAt: lease.expiresAt
     }, { timeoutMs: Math.max(1, Math.min(this.leaseTimeoutMs, remainingMs)) });
+    const executionRemainingMs = Math.min(deadlineMs, Date.parse(grant.expiresAt)) - this.clock().getTime();
+    if (executionRemainingMs <= 0) throw Object.assign(new Error("workload deadline expired before dispatch"), { code: "execution_timeout" });
     return this.controlServer.requestExecution(this.offer.providerId, {
       protocolVersion: "v0alpha1",
       executionId: lease.leaseId,
       grant,
       lease,
       workload
-    }, { timeoutMs: Math.max(1, Math.min(workload.timeoutMs, Date.parse(grant.expiresAt) - this.clock().getTime())) });
+    }, { timeoutMs: Math.max(1, executionRemainingMs) });
   }
 }

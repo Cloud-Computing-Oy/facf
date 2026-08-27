@@ -199,7 +199,7 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
           throw error;
         }
         validateTerminalBinding(request, result, meter);
-        if (result.status !== "completed") throw new RemoteExecutionError(result.errorCode ?? "execution_failed", "provider execution failed");
+        if (result.status !== "completed" || meter.outcome !== "completed") throw new RemoteExecutionError("invalid_terminal_evidence", "provider runtime returned contradictory terminal evidence");
         if (Date.parse(result.completedAt) > Date.parse(request.grant.expiresAt)) throw new RemoteExecutionError("execution_deadline_exceeded", "provider completed execution after the grant deadline");
         return { result, meter };
       } finally {
@@ -260,13 +260,14 @@ function handleExecutionResult(message, connectedProviderId, socket, pending) {
     entry.reject(new RemoteExecutionError(code, "provider rejected execution", { noFallback: !safeBeforeRuntime.includes(code) }));
     return;
   }
-  if (message.status !== "completed") { entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned an invalid execution status")); return; }
+  if (message.status !== "completed") { entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned an invalid execution status", { noFallback: true })); return; }
   try {
     const result = validateResult(structuredClone(message.result));
     const meter = validateMeter(structuredClone(message.meter));
     validateTerminalBinding(entry.request, result, meter);
+    if (result.status !== "completed" || meter.outcome !== "completed") throw new ProtocolValidationError("terminal evidence", ["result and meter must report completed outcomes"]);
     entry.resolve({ result, meter });
   } catch {
-    entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned invalid terminal evidence"));
+    entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned invalid terminal evidence", { noFallback: true }));
   }
 }
