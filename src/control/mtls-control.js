@@ -156,6 +156,7 @@ export function connectControlAgent({ host, port, servername, key, cert, ca, age
       }
       if (message.type !== "lease_request") continue;
       if (!leaseAuthority) { socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", type: "lease_decision", messageId: idFactory(), inReplyTo: message.messageId, status: "rejected", code: "lease_authority_unavailable" })}\n`); continue; }
+      if (executions.size >= maxExecutionCache) { socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", type: "lease_decision", messageId: idFactory(), inReplyTo: message.messageId, status: "rejected", code: "replay_capacity_unavailable" })}\n`); continue; }
       try {
         const grant = leaseAuthority.request(message.payload);
         socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", type: "lease_decision", messageId: idFactory(), inReplyTo: message.messageId, status: "accepted", grant })}\n`);
@@ -180,8 +181,12 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
     else socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: value.inReplyTo, status: "rejected", code: "execution_result_too_large" })}\n`);
   };
   try {
-    if (!leaseAuthority || !executor) throw new RemoteExecutionError("execution_unavailable", "remote execution is unavailable");
+    if (!leaseAuthority) throw new RemoteExecutionError("execution_unavailable", "remote execution is unavailable");
     const request = validateExecutionRequest(structuredClone(message.payload));
+    if (!executor) {
+      leaseAuthority.release(request.lease.leaseId);
+      throw new RemoteExecutionError("execution_unavailable", "remote execution is unavailable");
+    }
     const fingerprint = createHash("sha256").update(canonicalStringify(request)).digest("base64url");
     const existing = executions.get(request.executionId);
     if (existing) {
@@ -191,13 +196,8 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       return;
     }
     if (executions.size >= maxExecutionCache) {
-      const terminal = [...executions.entries()].find(([, entry]) => entry.settled);
-      if (terminal) {
-        clearTimeout(terminal[1].expiry);
-        executions.delete(terminal[0]);
-      } else {
-        throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
-      }
+      leaseAuthority.release(request.lease.leaseId);
+      throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
     }
     if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
     const entry = { fingerprint, promise: null, settled: false, expiry: null };
