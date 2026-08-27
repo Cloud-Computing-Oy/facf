@@ -8,7 +8,7 @@
   "properties": {
     "protocolVersion": { "const": "v0alpha1" },
     "grantId": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "token": { "type": "string", "minLength": 43, "maxLength": 128 },
+    "token": { "type": "string", "minLength": 43, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
     "leaseId": { "type": "string", "minLength": 1, "maxLength": 128 },
     "workloadId": { "type": "string", "minLength": 1, "maxLength": 128 },
     "providerId": { "type": "string", "minLength": 1, "maxLength": 128 },

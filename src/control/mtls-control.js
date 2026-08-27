@@ -24,6 +24,7 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
   if (!Number.isInteger(maxMessageBytes) || maxMessageBytes < 1024) throw new RangeError("maxMessageBytes must be an integer >= 1024");
   if (!Number.isInteger(maxPendingRequests) || maxPendingRequests < 1) throw new RangeError("maxPendingRequests must be a positive integer");
   const connections = new Map();
+  const liveConnections = new Map();
   const pending = new Map();
   const server = tls.createServer({ key, cert, ca, requestCert: true, rejectUnauthorized: true, minVersion: "TLSv1.3" }, (socket) => {
     let connectedProviderId;
@@ -59,6 +60,9 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
           const accepted = registry.accept({ authorized: socket.authorized, commonName: certificate.subject?.CN, fingerprint256: certificate.fingerprint256 }, message);
           connectedProviderId = accepted.capability.providerId;
           connections.set(connectedProviderId, socket);
+          const providerSockets = liveConnections.get(connectedProviderId) ?? new Set();
+          providerSockets.add(socket);
+          liveConnections.set(connectedProviderId, providerSockets);
           socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", type: "ack", messageId: accepted.lastMessageId })}\n`);
           logger({ event: "capability_accepted", providerId: accepted.capability.providerId, agentId: accepted.agentId });
         } catch (error) {
@@ -70,7 +74,16 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
       if (Buffer.byteLength(buffered) > maxMessageBytes) socket.destroy(new Error("control message too large"));
     });
     socket.once("close", () => {
-      if (connectedProviderId && connections.get(connectedProviderId) === socket) connections.delete(connectedProviderId);
+      if (connectedProviderId) {
+        const providerSockets = liveConnections.get(connectedProviderId);
+        providerSockets?.delete(socket);
+        if (connections.get(connectedProviderId) === socket) {
+          const survivingSocket = providerSockets ? [...providerSockets].find((candidate) => !candidate.destroyed) : null;
+          if (survivingSocket) connections.set(connectedProviderId, survivingSocket);
+          else connections.delete(connectedProviderId);
+        }
+        if (!providerSockets?.size) liveConnections.delete(connectedProviderId);
+      }
       for (const [messageId, entry] of pending) if (entry.socket === socket) {
         clearTimeout(entry.timer);
         pending.delete(messageId);
