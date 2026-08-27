@@ -9,16 +9,17 @@ export class OllamaAdapter {
     this.timeoutMs = timeoutMs;
   }
 
-  async chat({ model, messages, options = {} }) {
+  async chat({ model, messages, options = {}, signal, timeoutMs = this.timeoutMs }) {
     if (!model || !Array.isArray(messages) || messages.length === 0) throw new ProviderExecutionError("invalid_workload", "model and messages are required");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, timeoutMs));
+    const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     try {
       const response = await this.fetchImpl(new URL("/api/chat", this.baseUrl), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model, messages, options, stream: false }),
-        signal: controller.signal
+        signal: requestSignal
       });
       if (!response.ok) throw new ProviderExecutionError("runtime_http_error", `Ollama returned HTTP ${response.status}`);
       const payload = await response.json();

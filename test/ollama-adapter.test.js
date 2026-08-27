@@ -36,6 +36,19 @@ test("Ollama adapter enforces its timeout", async () => {
   await assert.rejects(() => adapter.chat({ model: "test", messages: [{ role: "user", content: "hi" }] }), (error) => error.code === "runtime_timeout");
 });
 
+test("Ollama adapter honors an agent execution deadline signal", async () => {
+  const controller = new AbortController();
+  const adapter = new OllamaAdapter({
+    timeoutMs: 30000,
+    fetchImpl: async (_url, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+    })
+  });
+  const execution = adapter.chat({ model: "test", messages: [{ role: "user", content: "hi" }], signal: controller.signal });
+  controller.abort();
+  await assert.rejects(execution, (error) => error.code === "runtime_timeout");
+});
+
 test("Ollama adapter rejects credentials embedded in its base URL", () => {
   assert.throws(() => new OllamaAdapter({ baseUrl: "http://user:pass@127.0.0.1:11434" }), /must not contain credentials/);
 });

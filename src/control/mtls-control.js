@@ -188,7 +188,17 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
     if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
     const promise = (async () => {
       try {
-        const execution = await executor.execute({ workload: request.workload, lease: request.lease });
+        const remainingMs = Math.min(Date.parse(request.grant.expiresAt), Date.parse(request.lease.issuedAt) + request.workload.timeoutMs) - clock().getTime();
+        if (remainingMs <= 0) throw new RemoteExecutionError("execution_deadline_exceeded", "execution deadline expired before runtime dispatch");
+        const controller = new AbortController();
+        const deadline = setTimeout(() => controller.abort(), remainingMs);
+        deadline.unref();
+        let execution;
+        try {
+          execution = await executor.execute({ workload: request.workload, lease: request.lease, signal: controller.signal, timeoutMs: remainingMs });
+        } finally {
+          clearTimeout(deadline);
+        }
         let result;
         let meter;
         try {
@@ -254,7 +264,11 @@ function handleLeaseDecision(message, connectedProviderId, socket, pending) {
 
 function handleExecutionResult(message, connectedProviderId, socket, pending) {
   const entry = pending.get(message.inReplyTo);
-  if (!entry || entry.kind !== "execution") throw new RemoteExecutionError("unknown_correlation", "execution result does not match a pending request");
+  // A legitimate provider can finish after the broker's request timer has
+  // expired. Discard that late terminal frame without taking the authenticated
+  // connection (and unrelated in-flight executions) offline.
+  if (!entry) return;
+  if (entry.kind !== "execution") throw new RemoteExecutionError("unknown_correlation", "execution result does not match a pending request");
   if (entry.socket !== socket) throw new RemoteExecutionError("provider_connection_mismatch", "execution result came from another connection");
   if (entry.providerId !== connectedProviderId) throw new RemoteExecutionError("provider_identity_mismatch", "execution result came from another provider");
   pending.delete(message.inReplyTo); clearTimeout(entry.timer);

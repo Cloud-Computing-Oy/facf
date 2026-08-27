@@ -139,7 +139,13 @@ test("execution timeout after dispatch is an unknown no-fallback outcome", async
   t.after(() => server.close());
   const capability = { protocolVersion: "v0alpha1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], runtime: "ollama", region: "FI", trustTier: "community", slots: 1, expiresAt: new Date().toISOString() };
   const leaseAuthority = new AgentLeaseAuthority({ providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"] });
-  const executor = { execute: () => new Promise(() => {}) };
+  const executor = { execute: ({ workload, lease }) => new Promise((resolve) => setTimeout(() => {
+    const completedAt = new Date().toISOString();
+    resolve({
+      result: { protocolVersion: "v0alpha1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, status: "completed", output: { text: "late" }, completedAt },
+      meter: { protocolVersion: "v0alpha1", meterId: "meter-late", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, startedAt: completedAt, completedAt, durationMs: 0, inputTokens: 1, outputTokens: 1, priceEur: 0, outcome: "completed", metadata: { runtime: "ollama" } }
+    });
+  }, 40)) };
   const socket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000 });
   t.after(() => socket.destroy());
   await nextLine(socket);
@@ -150,6 +156,10 @@ test("execution timeout after dispatch is an unknown no-fallback outcome", async
   const dispatched = server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload }, { timeoutMs: 20 });
   await assert.rejects(server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload }, { timeoutMs: 20 }), (error) => error.code === "control_capacity_exceeded" && error.noFallback === false);
   await assert.rejects(dispatched, (error) => error.code === "execution_outcome_unknown" && error.noFallback === true);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const nextLease = { ...lease, leaseId: "lease-after-late-result", workloadId: "work-after-late-result", issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 20000).toISOString() };
+  const nextGrant = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: nextLease.leaseId, workloadId: nextLease.workloadId, providerId: nextLease.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: nextLease.issuedAt, expiresAt: nextLease.expiresAt });
+  assert.equal(nextGrant.leaseId, nextLease.leaseId);
 });
 
 test("broker falls through one enrolled cell before completing on a second mTLS cell", async (t) => {

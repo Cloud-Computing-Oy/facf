@@ -15,13 +15,13 @@ export class OllamaProvider {
     return structuredClone(this.offer);
   }
 
-  async execute({ workload, lease }) {
+  async execute({ workload, lease, signal, timeoutMs }) {
     if (lease.providerId !== this.offer.providerId || lease.offerId !== this.offer.offerId) throw new ProviderExecutionError("grant_mismatch", "lease is not bound to this provider offer");
     if (!this.offer.models.includes(workload.model)) throw new ProviderExecutionError("model_unavailable", "model is not available");
     const messages = workload.input?.messages;
     if (!Array.isArray(messages) || messages.length === 0) throw new ProviderExecutionError("invalid_workload", "Ollama workloads require input.messages");
     const startedAt = this.clock();
-    const response = await this.adapter.chat({ model: workload.model, messages, options: sanitizeOptions(workload.input.options) });
+    const response = await this.adapter.chat({ model: workload.model, messages, options: sanitizeOptions(workload.input.options), signal, timeoutMs });
     const completedAt = this.clock();
     const meter = validateMeter({
       protocolVersion: "v0alpha1",
