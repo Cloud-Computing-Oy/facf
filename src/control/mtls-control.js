@@ -224,6 +224,10 @@ function validateTerminalBinding(request, result, meter) {
       throw new RemoteExecutionError("terminal_binding_mismatch", "terminal evidence does not match execution request");
     }
   }
+  const deadlineMs = Date.parse(request.grant.expiresAt);
+  if (Date.parse(result.completedAt) > deadlineMs || Date.parse(meter.completedAt) > deadlineMs) {
+    throw new RemoteExecutionError("execution_deadline_exceeded", "terminal evidence exceeds the authorized execution deadline", { noFallback: true });
+  }
 }
 
 function canonicalStringify(value) {

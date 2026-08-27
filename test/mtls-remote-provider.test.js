@@ -47,3 +47,15 @@ test("remote provider does not dispatch after negotiation consumes the workload 
   await assert.rejects(provider.execute({ workload: { ...workload(), timeoutMs: 100 }, lease }), (error) => error.code === "execution_timeout");
   assert.equal(dispatched, false);
 });
+
+test("remote provider rejects a lease for a different offer before negotiation", async () => {
+  let negotiated = false;
+  const controlServer = {
+    async requestLease() { negotiated = true; },
+    async requestExecution() {}
+  };
+  const provider = new MtlsRemoteProvider({ offer: offer(), controlServer });
+  const lease = { protocolVersion: "v0alpha1", leaseId: "lease-1", workloadId: "workload-1", offerId: "different-offer", providerId: "provider-1", state: "running", issuedAt: "2026-08-26T08:00:00.000Z", expiresAt: "2026-08-26T08:00:30.000Z", attempt: 1 };
+  await assert.rejects(provider.execute({ workload: workload(), lease }), (error) => error.code === "lease_binding_mismatch");
+  assert.equal(negotiated, false);
+});

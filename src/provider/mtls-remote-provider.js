@@ -15,6 +15,9 @@ export class MtlsRemoteProvider {
   advertise() { return structuredClone(this.offer); }
 
   async execute({ workload, lease }) {
+    if (lease.offerId !== this.offer.offerId || lease.providerId !== this.offer.providerId) {
+      throw Object.assign(new Error("remote lease does not match this provider offer"), { code: "lease_binding_mismatch" });
+    }
     const startedAtMs = this.clock().getTime();
     const deadlineMs = Math.min(Date.parse(lease.expiresAt), startedAtMs + workload.timeoutMs);
     const remainingMs = deadlineMs - startedAtMs;
