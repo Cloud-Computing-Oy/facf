@@ -78,10 +78,12 @@ test("broker dispatches one idempotent lease-bound execution over mTLS", async (
   let executions = 0;
   const executor = { async execute({ workload, lease }) {
     executions += 1;
+    if (workload.input.messages[0].content === "runtime-timeout") throw Object.assign(new Error("runtime outcome unknown"), { code: "runtime_timeout" });
     const completedAt = new Date().toISOString();
     const text = workload.input.messages[0].content === "large-output" ? "x".repeat(4096) : "remote ok";
+    const output = workload.input.messages[0].content === "invalid-terminal" ? null : { text };
     return {
-      result: { protocolVersion: "v0alpha1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, status: "completed", output: { text }, completedAt },
+      result: { protocolVersion: "v0alpha1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, status: "completed", output, completedAt },
       meter: { protocolVersion: "v0alpha1", meterId: "meter-remote-1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, startedAt: completedAt, completedAt, durationMs: 0, inputTokens: 2, outputTokens: 2, priceEur: 0, outcome: "completed", metadata: { runtime: "ollama" } }
     };
   } };
@@ -95,8 +97,10 @@ test("broker dispatches one idempotent lease-bound execution over mTLS", async (
   const request = { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload };
   const first = await server.requestExecution("provider-1", request, { timeoutMs: 2000 });
   const second = await server.requestExecution("provider-1", request, { timeoutMs: 2000 });
+  const reordered = await server.requestExecution("provider-1", reverseObjectOrder(request), { timeoutMs: 2000 });
   assert.equal(first.result.output.text, "remote ok");
   assert.equal(second.result.output.text, "remote ok");
+  assert.equal(reordered.result.output.text, "remote ok");
   assert.equal(first.meter.leaseId, lease.leaseId);
   assert.equal(executions, 1);
   await assert.rejects(server.requestExecution("provider-1", { ...request, workload: { ...workload, input: { messages: [{ role: "user", content: "changed" }] } } }, { timeoutMs: 2000 }), (error) => error.code === "idempotency_conflict");
@@ -105,6 +109,25 @@ test("broker dispatches one idempotent lease-bound execution over mTLS", async (
   const grant2 = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: lease2.leaseId, workloadId: lease2.workloadId, providerId: lease2.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: lease2.issuedAt, expiresAt: lease2.expiresAt });
   const workload2 = { ...workload, workloadId: lease2.workloadId, input: { messages: [{ role: "user", content: "large-output" }] } };
   await assert.rejects(server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease2.leaseId, grant: grant2, lease: lease2, workload: workload2 }, { timeoutMs: 2000 }), (error) => error.code === "execution_result_too_large" && error.noFallback === true);
+  const lease3 = { ...lease, leaseId: "lease-remote-3", workloadId: "work-remote-3" };
+  const grant3 = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: lease3.leaseId, workloadId: lease3.workloadId, providerId: lease3.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: lease3.issuedAt, expiresAt: lease3.expiresAt });
+  const workload3 = { ...workload, workloadId: lease3.workloadId, input: { messages: [{ role: "user", content: "runtime-timeout" }] } };
+  await assert.rejects(server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease3.leaseId, grant: grant3, lease: lease3, workload: workload3 }, { timeoutMs: 2000 }), (error) => error.code === "runtime_timeout" && error.noFallback === true);
+  const invalidLease = { ...lease, leaseId: "lease-invalid-terminal", workloadId: "work-invalid-terminal" };
+  const invalidGrant = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: invalidLease.leaseId, workloadId: invalidLease.workloadId, providerId: invalidLease.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: invalidLease.issuedAt, expiresAt: invalidLease.expiresAt });
+  const invalidWorkload = { ...workload, workloadId: invalidLease.workloadId, input: { messages: [{ role: "user", content: "invalid-terminal" }] } };
+  await assert.rejects(server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: invalidLease.leaseId, grant: invalidGrant, lease: invalidLease, workload: invalidWorkload }, { timeoutMs: 2000 }), (error) => error.code === "invalid_terminal_evidence" && error.noFallback === true);
+  const lease4 = { ...lease, leaseId: "lease-remote-4", workloadId: "work-remote-4" };
+  const grant4 = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: lease4.leaseId, workloadId: lease4.workloadId, providerId: lease4.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: lease4.issuedAt, expiresAt: lease4.expiresAt });
+  const changedWorkloadId = "work-not-authorized";
+  const forgedRequest = {
+    protocolVersion: "v0alpha1",
+    executionId: lease4.leaseId,
+    grant: { ...grant4, workloadId: changedWorkloadId },
+    lease: { ...lease4, workloadId: changedWorkloadId },
+    workload: { ...workload, workloadId: changedWorkloadId }
+  };
+  await assert.rejects(server.requestExecution("provider-1", forgedRequest, { timeoutMs: 2000 }), (error) => error.code === "grant_unauthorized" && error.noFallback === false);
 });
 
 test("execution timeout after dispatch is an unknown no-fallback outcome", async (t) => {
@@ -171,6 +194,38 @@ test("broker falls through one enrolled cell before completing on a second mTLS 
   assert.equal(secondExecutions, 1);
 });
 
+test("closing a replaced provider socket does not reject work sent on the replacement", async (t) => {
+  const certificates = testCertificates();
+  t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
+  const registry = new ProviderRegistry({ enrollments: [{ agentId: "agent-1", providerId: "provider-1" }] });
+  const server = createMtlsControlServer({ key: certificates.serverKey, cert: certificates.serverCert, ca: certificates.ca, registry });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  t.after(() => server.close());
+  const capability = { protocolVersion: "v0alpha1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], runtime: "ollama", region: "FI", trustTier: "community", slots: 1, expiresAt: new Date().toISOString() };
+  const oldSocket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, heartbeatMs: 10000 });
+  await nextLine(oldSocket);
+  const leaseAuthority = new AgentLeaseAuthority({ providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"] });
+  let finishExecution;
+  const executor = { execute: () => new Promise((resolve) => { finishExecution = resolve; }) };
+  const newSocket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000 });
+  t.after(() => { oldSocket.destroy(); newSocket.destroy(); });
+  await nextLine(newSocket);
+  const issuedAt = new Date();
+  const lease = { protocolVersion: "v0alpha1", leaseId: "lease-reconnect", workloadId: "work-reconnect", offerId: "offer-1", providerId: "provider-1", state: "running", issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 20000).toISOString(), attempt: 1 };
+  const grant = await server.requestLease("provider-1", { protocolVersion: "v0alpha1", leaseId: lease.leaseId, workloadId: lease.workloadId, providerId: lease.providerId, capabilityId: "cap-1", model: "qwen2.5:7b", issuedAt: lease.issuedAt, expiresAt: lease.expiresAt });
+  const workload = { protocolVersion: "v0alpha1", workloadId: lease.workloadId, tenantId: "tenant-1", model: "qwen2.5:7b", dataClass: "synthetic", minimumTrustTier: "community", allowedRegions: ["FI"], maximumPriceEur: 0, timeoutMs: 2000, input: { messages: [{ role: "user", content: "synthetic" }] } };
+  const pending = server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload }, { timeoutMs: 2000 });
+  for (let attempt = 0; attempt < 100 && !finishExecution; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(typeof finishExecution, "function");
+  oldSocket.destroy();
+  const completedAt = new Date().toISOString();
+  finishExecution({
+    result: { protocolVersion: "v0alpha1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, status: "completed", output: { text: "replacement ok" }, completedAt },
+    meter: { protocolVersion: "v0alpha1", meterId: "meter-reconnect", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, startedAt: completedAt, completedAt, durationMs: 0, inputTokens: 1, outputTokens: 1, priceEur: 0, outcome: "completed", metadata: { runtime: "ollama" } }
+  });
+  assert.equal((await pending).result.output.text, "replacement ok");
+});
+
 test("broker refuses a lease for an inactive provider", async (t) => {
   const certificates = testCertificates();
   t.after(() => rmSync(certificates.root, { recursive: true, force: true }));
@@ -225,6 +280,12 @@ function nextLine(socket) {
     });
     socket.once("error", reject);
   });
+}
+
+function reverseObjectOrder(value) {
+  if (Array.isArray(value)) return value.map(reverseObjectOrder);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).reverse().map((key) => [key, reverseObjectOrder(value[key])]));
 }
 
 function testCertificates() {

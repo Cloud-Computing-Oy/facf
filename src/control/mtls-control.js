@@ -2,7 +2,7 @@ import tls from "node:tls";
 import { createHash, randomUUID } from "node:crypto";
 import { ControlMessageError } from "./provider-registry.js";
 import { AgentLeaseError } from "./agent-lease-authority.js";
-import { validateExecutionGrant, validateExecutionRequest, validateLeaseRequest, validateMeter, validateResult } from "../protocol/validate.js";
+import { ProtocolValidationError, validateExecutionGrant, validateExecutionRequest, validateLeaseRequest, validateMeter, validateResult } from "../protocol/validate.js";
 
 export class LeaseNegotiationError extends Error {
   constructor(code, message) { super(message); this.name = "LeaseNegotiationError"; this.code = code; }
@@ -46,11 +46,11 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
         try {
           const message = JSON.parse(line);
           if (message.type === "lease_decision") {
-            handleLeaseDecision(message, connectedProviderId, pending);
+            handleLeaseDecision(message, connectedProviderId, socket, pending);
             continue;
           }
           if (message.type === "execution_result") {
-            handleExecutionResult(message, connectedProviderId, pending);
+            handleExecutionResult(message, connectedProviderId, socket, pending);
             continue;
           }
           const certificate = socket.getPeerCertificate();
@@ -69,7 +69,7 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
     });
     socket.once("close", () => {
       if (connectedProviderId && connections.get(connectedProviderId) === socket) connections.delete(connectedProviderId);
-      for (const [messageId, entry] of pending) if (entry.providerId === connectedProviderId) {
+      for (const [messageId, entry] of pending) if (entry.socket === socket) {
         clearTimeout(entry.timer);
         pending.delete(messageId);
         entry.reject(entry.kind === "execution"
@@ -91,7 +91,7 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { pending.delete(messageId); reject(new LeaseNegotiationError("lease_timeout", "provider did not answer the lease request")); }, timeoutMs);
       timer.unref();
-      pending.set(messageId, { kind: "lease", providerId, request, resolve, reject, timer });
+      pending.set(messageId, { kind: "lease", providerId, socket, request, resolve, reject, timer });
       socket.write(encoded);
     });
   };
@@ -111,7 +111,7 @@ export function createMtlsControlServer({ key, cert, ca, registry, maxMessageByt
         reject(new RemoteExecutionError("execution_outcome_unknown", "provider did not return a terminal execution result", { noFallback: true }));
       }, timeoutMs);
       timer.unref();
-      pending.set(messageId, { kind: "execution", providerId, request, resolve, reject, timer });
+      pending.set(messageId, { kind: "execution", providerId, socket, request, resolve, reject, timer });
       socket.write(encoded);
     });
   };
@@ -176,7 +176,7 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
   try {
     if (!leaseAuthority || !executor) throw new RemoteExecutionError("execution_unavailable", "remote execution is unavailable");
     const request = validateExecutionRequest(structuredClone(message.payload));
-    const fingerprint = createHash("sha256").update(JSON.stringify(request)).digest("base64url");
+    const fingerprint = createHash("sha256").update(canonicalStringify(request)).digest("base64url");
     const existing = executions.get(request.executionId);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new RemoteExecutionError("idempotency_conflict", "executionId was reused with different request data");
@@ -185,12 +185,19 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       return;
     }
     if (executions.size >= maxExecutionCache) throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
-    if (!leaseAuthority.authorize({ leaseId: request.grant.leaseId, token: request.grant.token, model: request.grant.model })) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
+    if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
     const promise = (async () => {
       try {
         const execution = await executor.execute({ workload: request.workload, lease: request.lease });
-        const result = validateResult(structuredClone(execution.result));
-        const meter = validateMeter(structuredClone(execution.meter));
+        let result;
+        let meter;
+        try {
+          result = validateResult(structuredClone(execution.result));
+          meter = validateMeter(structuredClone(execution.meter));
+        } catch (error) {
+          if (error instanceof ProtocolValidationError) throw new RemoteExecutionError("invalid_terminal_evidence", "provider runtime returned invalid terminal evidence");
+          throw error;
+        }
         validateTerminalBinding(request, result, meter);
         if (result.status !== "completed") throw new RemoteExecutionError(result.errorCode ?? "execution_failed", "provider execution failed");
         if (Date.parse(result.completedAt) > Date.parse(request.grant.expiresAt)) throw new RemoteExecutionError("execution_deadline_exceeded", "provider completed execution after the grant deadline");
@@ -206,7 +213,8 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
     const execution = await promise;
     respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "completed", ...execution });
   } catch (error) {
-    respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "rejected", code: error?.code ?? "execution_failed" });
+    const code = error instanceof ProtocolValidationError ? "invalid_execution_request" : error?.code ?? "execution_failed";
+    respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "rejected", code });
   }
 }
 
@@ -218,11 +226,18 @@ function validateTerminalBinding(request, result, meter) {
   }
 }
 
-function handleLeaseDecision(message, connectedProviderId, pending) {
+function canonicalStringify(value) {
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalStringify(item)).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalStringify(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function handleLeaseDecision(message, connectedProviderId, socket, pending) {
   const entry = pending.get(message.inReplyTo);
   if (!entry || entry.kind !== "lease") throw new LeaseNegotiationError("unknown_correlation", "lease decision does not match a pending request");
+  if (entry.socket !== socket) throw new LeaseNegotiationError("provider_connection_mismatch", "lease decision came from another connection");
+  if (entry.providerId !== connectedProviderId) throw new LeaseNegotiationError("provider_identity_mismatch", "lease decision came from another provider");
   pending.delete(message.inReplyTo); clearTimeout(entry.timer);
-  if (entry.providerId !== connectedProviderId) { entry.reject(new LeaseNegotiationError("provider_identity_mismatch", "lease decision came from another provider")); return; }
   if (message.status === "rejected") { entry.reject(new LeaseNegotiationError(typeof message.code === "string" ? message.code : "lease_rejected", "provider rejected the lease request")); return; }
   if (message.status !== "accepted") { entry.reject(new LeaseNegotiationError("invalid_decision", "provider returned an invalid lease decision")); return; }
   try {
@@ -233,14 +248,16 @@ function handleLeaseDecision(message, connectedProviderId, pending) {
   } catch (error) { entry.reject(error instanceof LeaseNegotiationError ? error : new LeaseNegotiationError("invalid_grant", "provider returned an invalid execution grant")); }
 }
 
-function handleExecutionResult(message, connectedProviderId, pending) {
+function handleExecutionResult(message, connectedProviderId, socket, pending) {
   const entry = pending.get(message.inReplyTo);
   if (!entry || entry.kind !== "execution") throw new RemoteExecutionError("unknown_correlation", "execution result does not match a pending request");
+  if (entry.socket !== socket) throw new RemoteExecutionError("provider_connection_mismatch", "execution result came from another connection");
+  if (entry.providerId !== connectedProviderId) throw new RemoteExecutionError("provider_identity_mismatch", "execution result came from another provider");
   pending.delete(message.inReplyTo); clearTimeout(entry.timer);
-  if (entry.providerId !== connectedProviderId) { entry.reject(new RemoteExecutionError("provider_identity_mismatch", "execution result came from another provider")); return; }
   if (message.status === "rejected") {
     const code = typeof message.code === "string" ? message.code : "execution_rejected";
-    entry.reject(new RemoteExecutionError(code, "provider rejected execution", { noFallback: ["execution_result_too_large", "execution_deadline_exceeded"].includes(code) }));
+    const safeBeforeRuntime = ["execution_unavailable", "execution_cache_full", "grant_unauthorized", "invalid_execution_request"];
+    entry.reject(new RemoteExecutionError(code, "provider rejected execution", { noFallback: !safeBeforeRuntime.includes(code) }));
     return;
   }
   if (message.status !== "completed") { entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned an invalid execution status")); return; }

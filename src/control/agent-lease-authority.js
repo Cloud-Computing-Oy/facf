@@ -44,6 +44,18 @@ export class AgentLeaseAuthority {
     return Boolean(grant && timingSafeEqualText(grant.token, token) && grant.model === model && grant.scope === "execute:model");
   }
 
+  authorizeGrant(value) {
+    let candidate;
+    try { candidate = validateExecutionGrant(structuredClone(value)); } catch { return false; }
+    this.#expire();
+    const grant = this.#grants.get(candidate.leaseId);
+    if (!grant || !timingSafeEqualText(grant.token, candidate.token)) return false;
+    for (const key of ["protocolVersion", "grantId", "leaseId", "workloadId", "providerId", "model", "scope", "issuedAt", "expiresAt"]) {
+      if (grant[key] !== candidate[key]) return false;
+    }
+    return true;
+  }
+
   release(leaseId) { this.#requests.delete(leaseId); return this.#grants.delete(leaseId); }
   activeCount() { this.#expire(); return this.#grants.size; }
   #expire() { const now = this.clock().getTime(); for (const [leaseId, grant] of this.#grants) if (Date.parse(grant.expiresAt) <= now) { this.#grants.delete(leaseId); this.#requests.delete(leaseId); } }
