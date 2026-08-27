@@ -422,7 +422,6 @@ test("broker rejects an invalid event queue bound", () => {
 test("broker's audit log and event publisher queues are independent — one blocking never blocks the other", async () => {
   const idFactory = ids();
   const auditCalls = [];
-  const eventCalls = [];
   const auditLog = {
     async recordLease(lease) { auditCalls.push(lease); },
     async recordMeter(meter) { auditCalls.push(meter); }

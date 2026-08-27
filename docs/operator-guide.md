@@ -47,8 +47,8 @@ persistence and no new dependency installed.
 
 ## Event publishing (NATS)
 
-The reference implementation can also publish every lease that reaches a
-terminal state, and every meter event, to NATS subjects
+The reference implementation can also publish completed/failed leases, and
+every meter event, to NATS subjects
 (`src/persistence/nats-event-publisher.js`) for live consumption by other
 systems — dashboards, billing pipelines, alerting. This is independent of
 and additional to the Postgres audit log above: NATS publishing is

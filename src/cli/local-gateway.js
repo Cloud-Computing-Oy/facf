@@ -22,7 +22,7 @@ try {
   console.log(`FACF local gateway listening on http://${address.address}:${address.port}`);
   const shutdown = () => server.close(async () => {
     await auditLog?.pool.end().catch(() => {});
-    await eventPublisher?.connection.close().catch(() => {});
+    await eventPublisher?.connection.drain().catch(() => {});
     process.exit(0);
   });
   process.once("SIGINT", shutdown);

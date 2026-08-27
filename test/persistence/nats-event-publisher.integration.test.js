@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createEventPublisherFromEnv } from "../../src/persistence/nats-event-publisher.js";
 
+// Deliberately a distinct variable from NATS_URL: this test publishes and
+// subscribes against a real NATS server, so it must never fire just because
+// a shell or CI environment already has the application's real NATS_URL exported.
 const testNatsUrl = process.env.FACF_TEST_NATS_URL;
 const skip = testNatsUrl ? false : "FACF_TEST_NATS_URL is not set; skipping live NATS integration test";
 
-test("NatsEventPublisher's published lease and meter events reach a live subscriber", { skip }, async (t) => {
+test("NatsEventPublisher's published lease and meter events reach a live subscriber", { skip, timeout: 10000 }, async (t) => {
   const publisher = await createEventPublisherFromEnv({ NATS_URL: testNatsUrl });
   t.after(() => publisher.connection.close());
 
