@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NatsEventPublisher, createEventPublisherFromEnv } from "../../src/persistence/nats-event-publisher.js";
 
 function fakeConnection() {
@@ -77,6 +80,52 @@ test("createEventPublisherFromEnv connects with the plain URL when no credential
   assert.equal(connectCalls[0].servers, "tls://nats.example.com:4222");
   assert.equal(connectCalls[0].authenticator, undefined);
   assert.equal(connectCalls[0].tls, undefined);
+});
+
+test("createEventPublisherFromEnv authenticates with a creds file when NATS_CREDS_FILE is set", async (t) => {
+  const credsPath = join(tmpdir(), `facf-nats-test-${process.pid}-${Date.now()}.creds`);
+  await writeFile(credsPath, "-----BEGIN NATS USER JWT-----\nfake\n------END NATS USER JWT------\n");
+  t.after(() => rm(credsPath, { force: true }));
+
+  const connectCalls = [];
+  const loadNatsImpl = async () => ({
+    async connect(options) { connectCalls.push(options); return fakeConnection(); },
+    credsAuthenticator: (bytes) => ({ __fakeAuthenticator: true, bytes })
+  });
+  const publisher = await createEventPublisherFromEnv(
+    { NATS_URL: "tls://nats.example.com:4222", NATS_CREDS_FILE: credsPath },
+    { loadNatsImpl }
+  );
+  assert.ok(publisher instanceof NatsEventPublisher);
+  assert.equal(connectCalls.length, 1);
+  assert.notEqual(connectCalls[0].authenticator, undefined);
+  assert.equal(connectCalls[0].authenticator.__fakeAuthenticator, true);
+  assert.equal(connectCalls[0].tls, undefined);
+});
+
+test("createEventPublisherFromEnv configures mTLS when cert/key/CA files are set", async () => {
+  const connectCalls = [];
+  const loadNatsImpl = async () => ({
+    async connect(options) { connectCalls.push(options); return fakeConnection(); },
+    credsAuthenticator: (bytes) => ({ __fakeAuthenticator: true, bytes })
+  });
+  const publisher = await createEventPublisherFromEnv(
+    {
+      NATS_URL: "tls://nats.example.com:4222",
+      NATS_CLIENT_CERT_FILE: "/etc/facf/nats/client.crt",
+      NATS_CLIENT_KEY_FILE: "/etc/facf/nats/client.key",
+      NATS_CA_FILE: "/etc/facf/nats/ca.crt"
+    },
+    { loadNatsImpl }
+  );
+  assert.ok(publisher instanceof NatsEventPublisher);
+  assert.equal(connectCalls.length, 1);
+  assert.deepEqual(connectCalls[0].tls, {
+    certFile: "/etc/facf/nats/client.crt",
+    keyFile: "/etc/facf/nats/client.key",
+    caFile: "/etc/facf/nats/ca.crt"
+  });
+  assert.equal(connectCalls[0].authenticator, undefined);
 });
 
 test("createEventPublisherFromEnv rejects (fail-loud) when the connection attempt fails", async () => {
