@@ -295,7 +295,7 @@ function handleExecutionResult(message, connectedProviderId, socket, pending) {
   pending.delete(message.inReplyTo); clearTimeout(entry.timer);
   if (message.status === "rejected") {
     const code = typeof message.code === "string" ? message.code : "execution_rejected";
-    const safeBeforeRuntime = ["execution_unavailable", "execution_cache_full", "grant_unauthorized", "invalid_execution_request"];
+    const safeBeforeRuntime = ["execution_unavailable", "execution_cache_full", "grant_unauthorized", "invalid_execution_request", "invalid_workload", "grant_mismatch", "model_unavailable"];
     entry.reject(new RemoteExecutionError(code, "provider rejected execution", { noFallback: !safeBeforeRuntime.includes(code) }));
     return;
   }
