@@ -45,6 +45,38 @@ is optional and inert until configured:
 Without `DATABASE_URL`, the gateway runs exactly as before with no
 persistence and no new dependency installed.
 
+## Event publishing (NATS)
+
+The reference implementation can also publish completed/failed leases, and
+every meter event, to NATS subjects
+(`src/persistence/nats-event-publisher.js`) for live consumption by other
+systems — dashboards, billing pipelines, alerting. This is independent of
+and additional to the Postgres audit log above: NATS publishing is
+best-effort, live-only (no replay for a consumer that was offline), and a
+NATS outage never affects Postgres persistence or vice versa, since the two
+sinks have separate bounded queues.
+
+Subjects: `facf.leases.<state>` (e.g. `facf.leases.completed`,
+`facf.leases.failed`, `facf.leases.released`) and `facf.meters.recorded`
+for every meter event regardless of route. Payloads are the same JSON
+objects written to the audit log.
+
+Publishing is optional and inert until configured:
+
+1. Provision a NATS server and set `NATS_URL` (e.g.
+   `tls://host:4222`) in the gateway process's environment.
+2. Configure authentication with either `NATS_CREDS_FILE` (a NATS
+   credentials file) or the `NATS_CLIENT_CERT_FILE` / `NATS_CLIENT_KEY_FILE`
+   / `NATS_CA_FILE` trio for mutual TLS — pick one, both are optional.
+3. Start the gateway as usual (`npm run gateway:local` or your own
+   process). It logs `FACF event publishing enabled (NATS_URL set).` on
+   startup when configured.
+
+A misconfigured `NATS_URL` fails gateway startup immediately, the same as a
+bad `DATABASE_URL`. Once connected, a publish failure is logged and never
+blocks or fails a workload. Without `NATS_URL`, the gateway runs exactly as
+before with no publishing and no new dependency installed.
+
 ## Operating safeguards
 
 - Never route by price alone.

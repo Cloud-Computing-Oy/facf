@@ -36,7 +36,7 @@ for (const path of required) {
 
 function walk(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name === ".git") return [];
+    if (entry.name === ".git" || entry.name === "node_modules") return [];
     const path = join(directory, entry.name);
     return entry.isDirectory() ? walk(path) : [path];
   });

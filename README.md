@@ -163,6 +163,17 @@ Set `DATABASE_URL` and run
 `npm run db:migrate` once to enable it — see the
 [operator guide](docs/operator-guide.md#persistence) for details.
 
+## Optional NATS event publishing
+
+The broker can also publish completed/failed leases and meter events live
+to NATS subjects for any number of independent consumers — dashboards,
+billing, alerting — separate from and in addition to the Postgres audit
+log above. It's best-effort and live-only (a consumer that needs full
+history reads Postgres instead), off by default, and adds no required
+dependency. Set `NATS_URL` (plus optional credentials) to enable it — see
+the [operator guide](docs/operator-guide.md#event-publishing-nats) for
+details.
+
 ## Authenticated provider control alpha
 
 The first private multi-node building block accepts short-lived capability

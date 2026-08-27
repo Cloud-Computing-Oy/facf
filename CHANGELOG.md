@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add optional live NATS event publishing for completed/failed leases and
+  meter events, independent of and in addition to Postgres audit
+  persistence, off by default and requiring no new mandatory dependency.
 - Add a bounded, grant-bound remote execution data-plane slice over the
   enrolled provider mTLS connection, including idempotency, hard message and
   pending-operation limits, two-cell fallback tests, and no replay after an

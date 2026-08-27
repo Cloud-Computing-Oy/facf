@@ -69,3 +69,26 @@ test("runnable gateway records the completed lease and meter when an audit log i
   assert.equal(leaseCalls[0].state, "completed");
   assert.equal(meterCalls.length, 1);
 });
+
+test("runnable gateway publishes the completed lease and meter when an event publisher is configured", async (t) => {
+  const leaseCalls = [];
+  const meterCalls = [];
+  const eventPublisher = {
+    async publishLease(lease) { leaseCalls.push(lease); },
+    async publishMeter(meter) { meterCalls.push(meter); }
+  };
+  const fetchImpl = async () => new Response(JSON.stringify({ message: { content: "FACF LOCAL OK" }, prompt_eval_count: 4, eval_count: 3 }), { status: 200 });
+  const config = localGatewayConfig({ FACF_GATEWAY_ENABLE: "1", FACF_GATEWAY_PORT: "8787", FACF_OLLAMA_MODEL: "qwen2.5:7b" });
+  const server = createLocalOllamaGateway(config, { fetchImpl, eventPublisher });
+  const address = await listenLocal(server, { port: 0 });
+  t.after(() => server.close());
+  const response = await fetch(`http://127.0.0.1:${address.port}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model: "qwen2.5:7b", messages: [{ role: "user", content: "synthetic test" }], facf: { data_class: "synthetic" } })
+  });
+  assert.equal(response.status, 200);
+  assert.equal(leaseCalls.length, 1);
+  assert.equal(leaseCalls[0].state, "completed");
+  assert.equal(meterCalls.length, 1);
+});
