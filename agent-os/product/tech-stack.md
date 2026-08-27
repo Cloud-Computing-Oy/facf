@@ -17,7 +17,9 @@ require an Architecture Decision Record and milestone evidence.
 
 - Node.js for the reference broker, gateway, and provider agent (see
   [ADR 0004](../../docs/adr/0004-node-reference-implementation.md)).
-- NATS JetStream for durable asynchronous events.
+- NATS core pub/sub for live lease and meter event publishing (see
+  `../../docs/operator-guide.md#event-publishing-nats`); JetStream remains a
+  future option if a concrete need for replay emerges.
 - Typed policy in the reference implementation initially; evaluate Open
   Policy Agent only when externally administered policies justify it.
 
