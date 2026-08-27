@@ -265,7 +265,11 @@ function canonicalStringify(value) {
 
 function handleLeaseDecision(message, connectedProviderId, socket, pending) {
   const entry = pending.get(message.inReplyTo);
-  if (!entry || entry.kind !== "lease") throw new LeaseNegotiationError("unknown_correlation", "lease decision does not match a pending request");
+  // A valid decision can arrive after the broker's negotiation timer. Ignore
+  // that late frame without disconnecting the provider or disturbing unrelated
+  // in-flight executions on the same authenticated socket.
+  if (!entry) return;
+  if (entry.kind !== "lease") throw new LeaseNegotiationError("unknown_correlation", "lease decision does not match a pending request");
   if (entry.socket !== socket) throw new LeaseNegotiationError("provider_connection_mismatch", "lease decision came from another connection");
   if (entry.providerId !== connectedProviderId) throw new LeaseNegotiationError("provider_identity_mismatch", "lease decision came from another provider");
   pending.delete(message.inReplyTo); clearTimeout(entry.timer);
