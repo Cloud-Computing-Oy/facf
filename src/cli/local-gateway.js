@@ -22,7 +22,15 @@ try {
   console.log(`FACF local gateway listening on http://${address.address}:${address.port}`);
   const shutdown = () => server.close(async () => {
     await auditLog?.pool.end().catch(() => {});
-    await eventPublisher?.connection.drain().catch(() => {});
+    if (eventPublisher) {
+      // drain() waits on a server round-trip; with maxReconnectAttempts: -1
+      // (infinite) a dead NATS server would otherwise hang shutdown forever.
+      await Promise.race([
+        eventPublisher.connection.drain(),
+        new Promise((resolve) => setTimeout(resolve, 5000))
+      ]).catch(() => {});
+      await eventPublisher.connection.close().catch(() => {});
+    }
     process.exit(0);
   });
   process.once("SIGINT", shutdown);
