@@ -195,13 +195,13 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "completed", ...execution });
       return;
     }
+    if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
     if (executions.size >= maxExecutionCache) {
       leaseAuthority.release(request.lease.leaseId);
       throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
     }
-    if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
     leaseAuthority.start(request.lease.leaseId);
-    const entry = { fingerprint, promise: null, settled: false, expiry: null };
+    const entry = { fingerprint, promise: null, settled: false, expiry: null, retentionUntilMs: 0 };
     const promise = (async () => {
       try {
         const remainingMs = Math.min(Date.parse(request.grant.expiresAt), Date.parse(request.lease.issuedAt) + request.workload.timeoutMs) - clock().getTime();
@@ -231,11 +231,18 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       } finally {
         leaseAuthority.release(request.lease.leaseId);
       }
-    })().finally(() => { entry.settled = true; });
+    })().finally(() => {
+      entry.settled = true;
+      if (entry.retentionUntilMs > 0 && clock().getTime() >= entry.retentionUntilMs) executions.delete(request.executionId);
+    });
     entry.promise = promise;
     executions.set(request.executionId, entry);
-    const retentionMs = Math.max(1, Date.parse(request.grant.expiresAt) - clock().getTime() + 1000);
-    const expiry = setTimeout(() => executions.delete(request.executionId), retentionMs);
+    entry.retentionUntilMs = Date.parse(request.grant.expiresAt) + 1000;
+    const retentionMs = Math.max(1, entry.retentionUntilMs - clock().getTime());
+    const expiry = setTimeout(() => {
+      entry.expiry = null;
+      if (entry.settled) executions.delete(request.executionId);
+    }, retentionMs);
     expiry.unref();
     entry.expiry = expiry;
     const execution = await promise;
