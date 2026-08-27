@@ -14,12 +14,12 @@ export class MtlsRemoteProvider {
 
   advertise() { return structuredClone(this.offer); }
 
-  async execute({ workload, lease }) {
+  async execute({ workload, lease, deadlineMs: brokerDeadlineMs } = {}) {
     if (lease.offerId !== this.offer.offerId || lease.providerId !== this.offer.providerId) {
       throw Object.assign(new Error("remote lease does not match this provider offer"), { code: "lease_binding_mismatch" });
     }
     const startedAtMs = this.clock().getTime();
-    const deadlineMs = Math.min(Date.parse(lease.expiresAt), startedAtMs + workload.timeoutMs);
+    const deadlineMs = Math.min(Date.parse(lease.expiresAt), brokerDeadlineMs ?? startedAtMs + workload.timeoutMs);
     const remainingMs = deadlineMs - startedAtMs;
     if (remainingMs <= 0) throw Object.assign(new Error("remote lease expired before negotiation"), { code: "lease_expired" });
     const grant = await this.controlServer.requestLease(this.offer.providerId, {
@@ -30,7 +30,7 @@ export class MtlsRemoteProvider {
       capabilityId: this.offer.capabilityId,
       model: workload.model,
       issuedAt: lease.issuedAt,
-      expiresAt: lease.expiresAt
+      expiresAt: new Date(deadlineMs).toISOString()
     }, { timeoutMs: Math.max(1, Math.min(this.leaseTimeoutMs, remainingMs)) });
     const executionRemainingMs = Math.min(deadlineMs, Date.parse(grant.expiresAt)) - this.clock().getTime();
     if (executionRemainingMs <= 0) throw Object.assign(new Error("workload deadline expired before dispatch"), { code: "execution_timeout" });

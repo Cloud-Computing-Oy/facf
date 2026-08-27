@@ -184,8 +184,17 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "completed", ...execution });
       return;
     }
-    if (executions.size >= maxExecutionCache) throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
+    if (executions.size >= maxExecutionCache) {
+      const terminal = [...executions.entries()].find(([, entry]) => entry.settled);
+      if (terminal) {
+        clearTimeout(terminal[1].expiry);
+        executions.delete(terminal[0]);
+      } else {
+        throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
+      }
+    }
     if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
+    const entry = { fingerprint, promise: null, settled: false, expiry: null };
     const promise = (async () => {
       try {
         const remainingMs = Math.min(Date.parse(request.grant.expiresAt), Date.parse(request.lease.issuedAt) + request.workload.timeoutMs) - clock().getTime();
@@ -215,11 +224,13 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       } finally {
         leaseAuthority.release(request.lease.leaseId);
       }
-    })();
-    executions.set(request.executionId, { fingerprint, promise });
+    })().finally(() => { entry.settled = true; });
+    entry.promise = promise;
+    executions.set(request.executionId, entry);
     const retentionMs = Math.max(1, Date.parse(request.grant.expiresAt) - clock().getTime() + 1000);
     const expiry = setTimeout(() => executions.delete(request.executionId), retentionMs);
     expiry.unref();
+    entry.expiry = expiry;
     const execution = await promise;
     respond({ protocolVersion: "v0alpha1", type: "execution_result", inReplyTo: message.messageId, status: "completed", ...execution });
   } catch (error) {

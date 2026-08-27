@@ -87,7 +87,7 @@ test("broker dispatches one idempotent lease-bound execution over mTLS", async (
       meter: { protocolVersion: "v0alpha1", meterId: "meter-remote-1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, startedAt: completedAt, completedAt, durationMs: 0, inputTokens: 2, outputTokens: 2, priceEur: 0, outcome: "completed", metadata: { runtime: "ollama" } }
     };
   } };
-  const socket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000, maxMessageBytes: 2048 });
+  const socket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000, maxMessageBytes: 2048, maxExecutionCache: 1 });
   t.after(() => socket.destroy());
   await nextLine(socket);
   const issuedAt = new Date();
