@@ -4,7 +4,7 @@
 
 The first machine-readable contracts are published under
 [`protocol/v0alpha1`](../protocol/v0alpha1/README.md). They cover workloads,
-capabilities, offers, leases, results, and meter events. The alpha version is a
+capabilities, offers, leases, grant-bound execution requests, results, and meter events. The alpha version is a
 conformance and simulation surface; it has no backward-compatibility promise
 before `v1`.
 
@@ -112,6 +112,19 @@ After acceptance, the agent returns a short-lived, least-privilege grant scoped
 to one lease, runtime, model, and deadline. It MUST NOT permit administration or
 another workload.
 
+## Bounded Remote Execution
+
+The v0alpha1 data-plane slice sends one closed `execution-request` payload over
+the authenticated provider connection. The request contains the grant, running
+lease, and complete public or synthetic workload. The agent MUST bind all
+provider, workload, lease, model, and deadline fields before invoking its
+allowlisted runtime.
+
+An identical retry for the same execution ID MUST return the cached in-flight or
+terminal outcome. Reusing the ID with changed request data MUST fail closed. A
+timeout or disconnect after dispatch leaves the outcome unknown and MUST NOT
+trigger transparent execution on another provider.
+
 ## Meter Statement
 
 ```json
@@ -143,5 +156,7 @@ provider and gateway observations and flags material disagreement.
 
 ## Privacy
 
-Prompt and response bodies MUST NOT appear in control-plane messages, routine
-logs, or metrics. Data-plane handling follows the selected trust class.
+Prompt and response bodies MUST NOT appear in capability, heartbeat, lease, or
+other control-plane payloads, routine logs, meter metadata, or metrics. They may
+appear only inside the authenticated execution request and terminal result
+data-plane frames. Data-plane handling follows the selected trust class.

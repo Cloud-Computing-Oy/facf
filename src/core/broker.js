@@ -106,7 +106,10 @@ export class Broker {
         lease = this.leaseStore.transition(lease.leaseId, "running");
         const provider = providers.get(candidate.offer.providerId);
         if (!provider) throw new Error("provider_not_connected");
-        const execution = await withTimeout(provider.execute({ workload, lease }), workload.timeoutMs, "execution_timeout");
+        const executionPromise = provider.execute({ workload, lease });
+        const execution = provider.executionTimeoutManaged
+          ? await executionPromise
+          : await withTimeout(executionPromise, workload.timeoutMs, "execution_timeout");
         this.leaseStore.transition(lease.leaseId, "completed");
         const finalLease = this.leaseStore.get(lease.leaseId);
         this.#recordLease(finalLease);
@@ -122,6 +125,7 @@ export class Broker {
             this.#recordLease(this.leaseStore.transition(lease.leaseId, "released"));
           }
         }
+        if (error.noFallback) throw new NoEligibleProviderError([...ranking.rejected, ...failures]);
         if (error instanceof LeaseConflictError) continue;
       }
     }

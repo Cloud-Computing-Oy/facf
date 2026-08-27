@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { validateExecutionGrant, validateLeaseRequest, validateOffer, validateWorkload } from "../src/protocol/validate.js";
 
 const root = new URL("../protocol/v0alpha1/", import.meta.url);
-const expectedSchemas = ["capability", "execution-grant", "lease", "lease-request", "meter", "offer", "result", "workload"];
+const expectedSchemas = ["capability", "execution-grant", "execution-request", "lease", "lease-request", "meter", "offer", "result", "workload"];
 const files = await readdir(root);
 for (const name of expectedSchemas) {
   const filename = `${name}.schema.json`;

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a bounded, grant-bound remote execution data-plane slice over the
+  enrolled provider mTLS connection, including idempotency, hard message and
+  pending-operation limits, two-cell fallback tests, and no replay after an
+  ambiguous dispatch outcome.
 - Add optional Postgres audit persistence for completed/failed leases and
   meter events, off by default and requiring no new mandatory dependency.
 - Add a local-only OpenAI-compatible chat-completions gateway with bounded

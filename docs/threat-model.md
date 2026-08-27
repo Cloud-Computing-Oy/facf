@@ -22,7 +22,7 @@ This document defines the initial security assumptions for FACF. It is not a cer
 | Replay or double execution | Unique request and lease IDs, expiries, idempotency keys, monotonic state transitions | External side effects require application-level idempotency |
 | Denial of service | Admission control, quotas, bounded queues, circuit breakers, provider diversity | Large coordinated attacks can exhaust economic capacity |
 | Supply-chain compromise | Signed releases, reproducible build goals, dependency review, staged rollout | Build infrastructure and upstream dependencies remain trust anchors |
-| Metering or billing fraud | Signed usage events, reconciliation, bounded disputes, immutable audit records | Economic attacks may remain below detection thresholds |
+| Metering or billing fraud | Signed usage goals, reconciliation, bounded disputes, and best-effort alpha audit records | Alpha audit writes can be dropped or falsified; economic attacks may remain below detection thresholds |
 
 ## Important limitation
 

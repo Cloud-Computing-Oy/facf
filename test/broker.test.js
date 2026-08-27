@@ -287,3 +287,23 @@ test("broker rejects an invalid audit queue bound", () => {
     /maxPendingAuditWrites must be a positive integer/
   );
 });
+
+test("broker never retries or falls back after an ambiguous remote dispatch", async () => {
+  const idFactory = ids();
+  let fallbackCalls = 0;
+  const remote = {
+    executionTimeoutManaged: true,
+    async execute() { throw Object.assign(new Error("unknown outcome"), { code: "execution_outcome_unknown", noFallback: true }); }
+  };
+  const fallback = {
+    providerId: "cloud",
+    capability: { region: "FI", trustTier: "community", dataClasses: ["public"] },
+    async execute() { fallbackCalls += 1; return { text: "must not execute", usage: {}, priceEur: 0 }; }
+  };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory, maxAttempts: 1 });
+  await assert.rejects(
+    () => broker.run(workload(), [offer()], new Map([["provider-1", remote]])),
+    (error) => error instanceof NoEligibleProviderError && error.rejected.at(-1).code === "execution_outcome_unknown"
+  );
+  assert.equal(fallbackCalls, 0);
+});
