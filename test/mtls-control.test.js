@@ -216,9 +216,11 @@ test("closing a replaced provider socket does not reject work sent on the replac
   await nextLine(oldSocket);
   const leaseAuthority = new AgentLeaseAuthority({ providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"] });
   let finishExecution;
-  const executor = { execute: () => new Promise((resolve) => { finishExecution = resolve; }) };
+  let executionCalls = 0;
+  const executor = { execute: () => { executionCalls += 1; return new Promise((resolve) => { finishExecution = resolve; }); } };
   const newSocket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000 });
-  t.after(() => { oldSocket.destroy(); newSocket.destroy(); });
+  let replacementSocket;
+  t.after(() => { oldSocket.destroy(); newSocket.destroy(); replacementSocket?.destroy(); });
   await nextLine(newSocket);
   const issuedAt = new Date();
   const lease = { protocolVersion: "v0alpha1", leaseId: "lease-reconnect", workloadId: "work-reconnect", offerId: "offer-1", providerId: "provider-1", state: "running", issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 20000).toISOString(), attempt: 1 };
@@ -227,13 +229,19 @@ test("closing a replaced provider socket does not reject work sent on the replac
   const pending = server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload }, { timeoutMs: 2000 });
   for (let attempt = 0; attempt < 100 && !finishExecution; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(typeof finishExecution, "function");
+  replacementSocket = connectControlAgent({ host: "127.0.0.1", port: server.address().port, servername: "broker.test", key: certificates.clientKey, cert: certificates.clientCert, ca: certificates.ca, agentId: "agent-1", capability, leaseAuthority, executor, heartbeatMs: 10000 });
+  await nextLine(replacementSocket);
+  const replay = server.requestExecution("provider-1", { protocolVersion: "v0alpha1", executionId: lease.leaseId, grant, lease, workload }, { timeoutMs: 2000 });
   oldSocket.destroy();
   const completedAt = new Date().toISOString();
   finishExecution({
     result: { protocolVersion: "v0alpha1", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, status: "completed", output: { text: "replacement ok" }, completedAt },
     meter: { protocolVersion: "v0alpha1", meterId: "meter-reconnect", workloadId: workload.workloadId, leaseId: lease.leaseId, providerId: lease.providerId, startedAt: completedAt, completedAt, durationMs: 0, inputTokens: 1, outputTokens: 1, priceEur: 0, outcome: "completed", metadata: { runtime: "ollama" } }
   });
-  assert.equal((await pending).result.output.text, "replacement ok");
+  const [firstResult, replayResult] = await Promise.all([pending, replay]);
+  assert.equal(firstResult.result.output.text, "replacement ok");
+  assert.equal(replayResult.result.output.text, "replacement ok");
+  assert.equal(executionCalls, 1);
 });
 
 test("broker refuses a lease for an inactive provider", async (t) => {

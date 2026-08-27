@@ -59,3 +59,14 @@ test("remote provider rejects a lease for a different offer before negotiation",
   await assert.rejects(provider.execute({ workload: workload(), lease }), (error) => error.code === "lease_binding_mismatch");
   assert.equal(negotiated, false);
 });
+
+test("remote provider rejects over-budget terminal meter evidence without fallback", async () => {
+  const grant = { protocolVersion: "v0alpha1", grantId: "grant-1", token: "A".repeat(43), leaseId: "lease-1", workloadId: "workload-1", providerId: "provider-1", model: "qwen2.5:7b", scope: "execute:model", issuedAt: "2026-08-26T08:00:00.000Z", expiresAt: "2026-08-26T08:00:20.000Z" };
+  const controlServer = {
+    async requestLease() { return grant; },
+    async requestExecution() { return { result: { status: "completed" }, meter: { priceEur: 1 } }; }
+  };
+  const provider = new MtlsRemoteProvider({ offer: offer(), controlServer, clock: () => new Date("2026-08-26T08:00:00.000Z") });
+  const lease = { protocolVersion: "v0alpha1", leaseId: "lease-1", workloadId: "workload-1", offerId: "offer-1", providerId: "provider-1", state: "running", issuedAt: "2026-08-26T08:00:00.000Z", expiresAt: "2026-08-26T08:00:30.000Z", attempt: 1 };
+  await assert.rejects(provider.execute({ workload: workload(), lease }), (error) => error.code === "price_ceiling_exceeded" && error.noFallback === true);
+});

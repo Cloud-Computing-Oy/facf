@@ -34,12 +34,16 @@ export class MtlsRemoteProvider {
     }, { timeoutMs: Math.max(1, Math.min(this.leaseTimeoutMs, remainingMs)) });
     const executionRemainingMs = Math.min(deadlineMs, Date.parse(grant.expiresAt)) - this.clock().getTime();
     if (executionRemainingMs <= 0) throw Object.assign(new Error("workload deadline expired before dispatch"), { code: "execution_timeout" });
-    return this.controlServer.requestExecution(this.offer.providerId, {
+    const execution = await this.controlServer.requestExecution(this.offer.providerId, {
       protocolVersion: "v0alpha1",
       executionId: lease.leaseId,
       grant,
       lease,
       workload
     }, { timeoutMs: Math.max(1, executionRemainingMs) });
+    if (execution.meter?.priceEur > workload.maximumPriceEur || execution.meter?.priceEur > this.offer.priceEur) {
+      throw Object.assign(new Error("remote meter exceeds the authorized price ceiling"), { code: "price_ceiling_exceeded", noFallback: true });
+    }
+    return execution;
   }
 }

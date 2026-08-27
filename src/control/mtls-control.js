@@ -4,6 +4,8 @@ import { ControlMessageError } from "./provider-registry.js";
 import { AgentLeaseError } from "./agent-lease-authority.js";
 import { ProtocolValidationError, validateExecutionGrant, validateExecutionRequest, validateLeaseRequest, validateMeter, validateResult } from "../protocol/validate.js";
 
+const executionStores = new WeakMap();
+
 export class LeaseNegotiationError extends Error {
   constructor(code, message) { super(message); this.name = "LeaseNegotiationError"; this.code = code; }
 }
@@ -131,7 +133,11 @@ export function connectControlAgent({ host, port, servername, key, cert, ca, age
     socket.destroy();
   });
   const send = () => socket.write(`${JSON.stringify({ protocolVersion: "v0alpha1", messageId: idFactory(), sentAt: clock().toISOString(), agentId, type: "capability", payload: { ...capability, expiresAt: new Date(clock().getTime() + Math.min(heartbeatMs * 2, 30000)).toISOString() } })}\n`);
-  const executions = new Map();
+  let executions = new Map();
+  if (leaseAuthority) {
+    executions = executionStores.get(leaseAuthority) ?? executions;
+    executionStores.set(leaseAuthority, executions);
+  }
   socket.once("secureConnect", send);
   let buffered = "";
   socket.setEncoding("utf8");
@@ -295,6 +301,7 @@ function handleExecutionResult(message, connectedProviderId, socket, pending) {
     const meter = validateMeter(structuredClone(message.meter));
     validateTerminalBinding(entry.request, result, meter);
     if (result.status !== "completed" || meter.outcome !== "completed") throw new ProtocolValidationError("terminal evidence", ["result and meter must report completed outcomes"]);
+    if (meter.priceEur > entry.request.workload.maximumPriceEur) throw new ProtocolValidationError("terminal evidence", ["meter price exceeds workload budget"]);
     entry.resolve({ result, meter });
   } catch {
     entry.reject(new RemoteExecutionError("invalid_execution_result", "provider returned invalid terminal evidence", { noFallback: true }));
