@@ -26,6 +26,12 @@ FACF providers contribute explicitly approved compute capacity. Installing an ag
 
 Consumer devices can be useful for development, public-data jobs, burst capacity, and community-tier workloads. The agent must respect foreground use, battery state, thermal limits, quiet hours, bandwidth limits, and a user-controlled pause or exit. Business-confidential workloads should not be routed to ordinary consumer hosts.
 
+The v0alpha1 remote execution slice accepts only public or synthetic workloads.
+It invokes an explicitly configured runtime executor and never grants the broker
+shell, filesystem, or administrative access. Operators must treat a disconnect
+after dispatch as an unknown outcome until terminal evidence or expiry resolves
+the lease; it must not be replayed automatically elsewhere.
+
 ## Compensation
 
 The protocol can carry provider offers and signed usage evidence. Settlement rules, taxes, minimum payout, chargebacks, and currency are network-operator policies. Providers should evaluate electricity, hardware depreciation, bandwidth, and tax obligations before offering capacity.

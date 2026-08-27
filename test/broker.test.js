@@ -33,6 +33,23 @@ test("broker retries another eligible provider after execution failure", async (
   assert.equal(execution.result.output.text, "second provider");
 });
 
+test("broker preserves one workload deadline across provider attempts", async () => {
+  const idFactory = ids();
+  let nowMs = fixedClock().getTime();
+  let secondCalls = 0;
+  const clock = () => new Date(nowMs);
+  const firstOffer = offer({ offerId: "offer-a", providerId: "provider-a", qualityScore: 1 });
+  const secondOffer = offer({ offerId: "offer-b", providerId: "provider-b", qualityScore: 0.8 });
+  const first = { async execute() { nowMs += 100; throw Object.assign(new Error("safe rejection"), { code: "capacity_unavailable" }); } };
+  const second = { async execute() { secondCalls += 1; return {}; } };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock, idFactory }), clock, idFactory });
+  await assert.rejects(
+    broker.run({ ...workload(), timeoutMs: 100 }, [firstOffer, secondOffer], new Map([["provider-a", first], ["provider-b", second]])),
+    (error) => error instanceof NoEligibleProviderError && error.rejected.some((entry) => entry.code === "execution_timeout")
+  );
+  assert.equal(secondCalls, 0);
+});
+
 test("broker uses bounded cloud fallback and emits fallback meter", async () => {
   const idFactory = ids();
   const provider = new SimulatedProvider({ offer: offer(), failureCode: "runtime_unreachable", clock: fixedClock, idFactory });
@@ -286,4 +303,24 @@ test("broker rejects an invalid audit queue bound", () => {
     () => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock }), maxPendingAuditWrites: 0 }),
     /maxPendingAuditWrites must be a positive integer/
   );
+});
+
+test("broker never retries or falls back after an ambiguous remote dispatch", async () => {
+  const idFactory = ids();
+  let fallbackCalls = 0;
+  const remote = {
+    executionTimeoutManaged: true,
+    async execute() { throw Object.assign(new Error("unknown outcome"), { code: "execution_outcome_unknown", noFallback: true }); }
+  };
+  const fallback = {
+    providerId: "cloud",
+    capability: { region: "FI", trustTier: "community", dataClasses: ["public"] },
+    async execute() { fallbackCalls += 1; return { text: "must not execute", usage: {}, priceEur: 0 }; }
+  };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory, maxAttempts: 1 });
+  await assert.rejects(
+    () => broker.run(workload(), [offer()], new Map([["provider-1", remote]])),
+    (error) => error instanceof NoEligibleProviderError && error.rejected.at(-1).code === "execution_outcome_unknown"
+  );
+  assert.equal(fallbackCalls, 0);
 });

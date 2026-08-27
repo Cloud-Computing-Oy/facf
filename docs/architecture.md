@@ -2,12 +2,13 @@
 
 ## Implementation status
 
-The repository currently implements a dependency-free Phase 0 simulator in
-Node.js. It includes deterministic policy filtering and scoring, an in-memory
-lease state machine, simulated whole-workload providers, privacy-safe meter
-events, an Ollama HTTP adapter boundary, and bounded fallback orchestration.
-Production identity, transport, persistence, event delivery, and billing remain
-Phase 1 or later work.
+The repository implements a Node.js Phase 0 simulator and bounded Phase 1
+slices: a loopback-only OpenAI-compatible gateway, Ollama execution, enrolled
+outbound mTLS provider presence, lease negotiation, and optional best-effort
+Postgres audit persistence. The current G2 slice transports complete public or
+synthetic workloads and terminal results over the authenticated connection.
+Incremental token streaming, production identity lifecycle, durable event
+delivery, reconciliation, and billing remain Phase 1 or later work.
 
 ## Design Boundary
 
@@ -74,8 +75,8 @@ before accepting a lease.
 4. Broker -> Agent: lease offer
 5. Agent: atomic local capacity check
 6. Agent -> Broker: accept + scoped execution grant
-7. Gateway -> Runtime: request stream
-8. Runtime -> Gateway: response stream
+7. Broker -> Agent: lease-bound execution request
+8. Agent -> Broker: terminal result and meter evidence
 9. Gateway + Agent -> Broker: signed meter observations
 10. Broker: reconcile and close lease
 ```
@@ -84,6 +85,8 @@ before accepting a lease.
 
 - Before streaming, the gateway may release a failed lease and select another
   provider after a bounded transient error.
+- Once a remote execution has been dispatched, a timeout or disconnect is an
+  unknown outcome and must not trigger transparent replay on another provider.
 - After client-visible tokens begin, transparent replay is disabled by default.
 - Agent disconnect does not erase completed meter evidence.
 - Expired leases release capacity but not audit history.

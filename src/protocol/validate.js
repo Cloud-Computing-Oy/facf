@@ -62,6 +62,7 @@ function exactKeys(value, allowed, issues) {
 export function validateWorkload(value) {
   const issues = [];
   if (!object(value, "workload", issues)) finish("workload", issues);
+  exactKeys(value, ["protocolVersion", "workloadId", "tenantId", "model", "dataClass", "minimumTrustTier", "allowedRegions", "maximumPriceEur", "timeoutMs", "input", "idempotencyKey"], issues);
   version(value.protocolVersion, issues);
   for (const key of ["workloadId", "tenantId", "model"]) text(value[key], key, issues);
   if (!DATA_CLASSES.includes(value.dataClass)) issues.push("dataClass is unsupported");
@@ -123,7 +124,7 @@ export function validateExecutionGrant(value) {
   exactKeys(value, ["protocolVersion", "grantId", "token", "leaseId", "workloadId", "providerId", "model", "scope", "issuedAt", "expiresAt"], issues);
   version(value.protocolVersion, issues);
   for (const key of ["grantId", "token", "leaseId", "workloadId", "providerId", "model"]) text(value[key], key, issues);
-  if (typeof value.token === "string" && value.token.length < 43) issues.push("token must contain at least 256 bits encoded as base64url");
+  if (typeof value.token === "string" && !/^[A-Za-z0-9_-]{43,128}$/.test(value.token)) issues.push("token must contain 43-128 base64url characters");
   if (value.scope !== "execute:model") issues.push("scope must be execute:model");
   date(value.issuedAt, "issuedAt", issues); date(value.expiresAt, "expiresAt", issues);
   finish("executionGrant", issues); return value;
@@ -132,6 +133,7 @@ export function validateExecutionGrant(value) {
 export function validateLease(value) {
   const issues = [];
   if (!object(value, "lease", issues)) finish("lease", issues);
+  exactKeys(value, ["protocolVersion", "leaseId", "workloadId", "offerId", "providerId", "state", "issuedAt", "expiresAt", "attempt"], issues);
   version(value.protocolVersion, issues);
   for (const key of ["leaseId", "workloadId", "offerId", "providerId"]) text(value[key], key, issues);
   if (!LEASE_STATES.includes(value.state)) issues.push("state is unsupported");
@@ -162,6 +164,44 @@ export function validateMeter(value) {
   if (!["completed", "failed", "fallback"].includes(value.outcome)) issues.push("outcome is unsupported");
   if (object(value.metadata, "metadata", issues)) inspectMeterMetadata(value.metadata, "metadata", issues);
   finish("meter", issues);
+  return value;
+}
+
+export function validateResult(value) {
+  const issues = [];
+  if (!object(value, "result", issues)) finish("result", issues);
+  exactKeys(value, ["protocolVersion", "workloadId", "leaseId", "providerId", "status", "output", "errorCode", "completedAt"], issues);
+  version(value.protocolVersion, issues);
+  for (const key of ["workloadId", "leaseId", "providerId"]) text(value[key], key, issues);
+  if (!['completed', 'failed'].includes(value.status)) issues.push("status is unsupported");
+  object(value.output, "output", issues);
+  if (value.errorCode !== undefined) text(value.errorCode, "errorCode", issues);
+  if (value.status === "failed" && value.errorCode === undefined) issues.push("failed result requires errorCode");
+  date(value.completedAt, "completedAt", issues);
+  finish("result", issues);
+  return value;
+}
+
+export function validateExecutionRequest(value) {
+  const issues = [];
+  if (!object(value, "executionRequest", issues)) finish("executionRequest", issues);
+  exactKeys(value, ["protocolVersion", "executionId", "grant", "lease", "workload"], issues);
+  version(value.protocolVersion, issues);
+  text(value.executionId, "executionId", issues);
+  try { validateExecutionGrant(value.grant); } catch (error) { issues.push(...(error.issues ?? ["grant is invalid"])); }
+  try { validateLease(value.lease); } catch (error) { issues.push(...(error.issues ?? ["lease is invalid"])); }
+  try { validateWorkload(value.workload); } catch (error) { issues.push(...(error.issues ?? ["workload is invalid"])); }
+  if (value.workload?.dataClass !== "public" && value.workload?.dataClass !== "synthetic") issues.push("remote alpha execution allows only public or synthetic data");
+  const grant = value.grant ?? {};
+  const lease = value.lease ?? {};
+  const workload = value.workload ?? {};
+  if (lease.state !== "running") issues.push("execution lease must be running");
+  if (grant.leaseId !== lease.leaseId || grant.leaseId !== value.executionId) issues.push("executionId, grant, and lease must identify the same lease");
+  if (grant.workloadId !== lease.workloadId || grant.workloadId !== workload.workloadId) issues.push("grant, lease, and workload must identify the same workload");
+  if (grant.providerId !== lease.providerId) issues.push("grant and lease must identify the same provider");
+  if (grant.model !== workload.model) issues.push("grant and workload must identify the same model");
+  if (Date.parse(grant.expiresAt) > Date.parse(lease.expiresAt)) issues.push("grant must not outlive lease");
+  finish("executionRequest", issues);
   return value;
 }
 

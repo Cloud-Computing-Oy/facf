@@ -86,6 +86,7 @@ export class Broker {
 
   async run(workload, offers, providers) {
     validateWorkload(workload);
+    const deadlineMs = this.clock().getTime() + workload.timeoutMs;
     const ranking = rankOffers(workload, offers, this.clock());
     const failures = [];
     let attempt = 0;
@@ -99,6 +100,10 @@ export class Broker {
         failures.push({ providerId: candidate.offer.providerId, code: "offer_expired" });
         continue;
       }
+      if (this.clock().getTime() >= deadlineMs) {
+        failures.push({ providerId: candidate.offer.providerId, code: "execution_timeout" });
+        break;
+      }
       let lease;
       try {
         lease = this.leaseStore.acquire(workload, candidate.offer, attempt);
@@ -106,7 +111,11 @@ export class Broker {
         lease = this.leaseStore.transition(lease.leaseId, "running");
         const provider = providers.get(candidate.offer.providerId);
         if (!provider) throw new Error("provider_not_connected");
-        const execution = await withTimeout(provider.execute({ workload, lease }), workload.timeoutMs, "execution_timeout");
+        const executionPromise = provider.execute({ workload, lease, deadlineMs });
+        const remainingMs = Math.max(1, deadlineMs - this.clock().getTime());
+        const execution = provider.executionTimeoutManaged
+          ? await executionPromise
+          : await withTimeout(executionPromise, remainingMs, "execution_timeout");
         this.leaseStore.transition(lease.leaseId, "completed");
         const finalLease = this.leaseStore.get(lease.leaseId);
         this.#recordLease(finalLease);
@@ -122,14 +131,15 @@ export class Broker {
             this.#recordLease(this.leaseStore.transition(lease.leaseId, "released"));
           }
         }
+        if (error.noFallback) throw new NoEligibleProviderError([...ranking.rejected, ...failures]);
         if (error instanceof LeaseConflictError) continue;
       }
     }
-    if (this.fallback) return this.#runFallback(workload, ranking, failures);
+    if (this.fallback) return this.#runFallback(workload, ranking, failures, deadlineMs);
     throw new NoEligibleProviderError([...ranking.rejected, ...failures]);
   }
 
-  async #runFallback(workload, ranking, failures) {
+  async #runFallback(workload, ranking, failures, deadlineMs) {
     const capability = this.fallback.capability;
     const reasons = evaluatePolicy(workload, {
       region: capability.region,
@@ -141,8 +151,10 @@ export class Broker {
       const code = reasons.includes("price_exceeds_budget") ? "fallback_price_not_allowed" : `fallback_${reasons[0]}`;
       throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code }]);
     }
+    const remainingMs = deadlineMs - this.clock().getTime();
+    if (remainingMs <= 0) throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code: "fallback_execution_timeout" }]);
     const startedAt = this.clock();
-    const response = await withTimeout(this.fallback.execute(workload), workload.timeoutMs, "fallback_execution_timeout");
+    const response = await withTimeout(this.fallback.execute(workload), remainingMs, "fallback_execution_timeout");
     if (!Number.isFinite(response.priceEur) || response.priceEur < 0 || response.priceEur > workload.maximumPriceEur) {
       throw new NoEligibleProviderError([...ranking.rejected, ...failures, { providerId: this.fallback.providerId, code: "fallback_price_not_allowed" }]);
     }

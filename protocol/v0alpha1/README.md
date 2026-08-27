@@ -11,6 +11,7 @@ is an alpha conformance surface, not a production or compatibility promise.
 - `lease.schema.json` — bounded reservation and lifecycle state;
 - `lease-request.schema.json` — content-free provider reservation request;
 - `execution-grant.schema.json` — short-lived, least-privilege runtime grant;
+- `execution-request.schema.json` — grant-bound whole-workload dispatch;
 - `result.schema.json` — execution outcome without transport assumptions;
 - `meter.schema.json` — privacy-safe usage evidence.
 

@@ -8,7 +8,10 @@ require an Architecture Decision Record and milestone evidence.
 - Initial operator interface: CLI and generated status pages.
 - Later dashboard: TypeScript and React.
 - Client API: OpenAPI 3.1 and OpenAI-compatible HTTP/SSE.
-- Provider control stream: gRPC/protobuf.
+- Provider control and first bounded data-plane slice: newline-delimited JSON
+  over outbound TLS 1.3 mutual-TLS connections.
+- Target interoperable transport after the v0alpha1 contracts stabilize:
+  gRPC/protobuf, recorded by a future transport ADR before migration.
 
 ## Backend
 
