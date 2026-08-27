@@ -324,3 +324,117 @@ test("broker never retries or falls back after an ambiguous remote dispatch", as
   );
   assert.equal(fallbackCalls, 0);
 });
+
+test("broker publishes the completed lease and meter as events on success", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const meterCalls = [];
+  const eventPublisher = {
+    async publishLease(lease) { leaseCalls.push(lease); },
+    async publishMeter(meter) { meterCalls.push(meter); }
+  };
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, eventPublisher });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(leaseCalls.length, 1);
+  assert.equal(leaseCalls[0].leaseId, execution.lease.leaseId);
+  assert.equal(leaseCalls[0].state, "completed");
+  assert.equal(meterCalls.length, 1);
+  assert.equal(meterCalls[0].meterId, execution.meter.meterId);
+});
+
+test("broker publishes each failed attempt before publishing the eventual success", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const eventPublisher = { async publishLease(lease) { leaseCalls.push(lease); }, async publishMeter() {} };
+  const firstOffer = offer({ offerId: "offer-a", providerId: "provider-a", qualityScore: 1 });
+  const secondOffer = offer({ offerId: "offer-b", providerId: "provider-b", qualityScore: 0.8 });
+  const first = new SimulatedProvider({ offer: firstOffer, failureCode: "runtime_unreachable", clock: fixedClock, idFactory });
+  const second = new SimulatedProvider({ offer: secondOffer, responseText: "second provider", clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, eventPublisher });
+  await broker.run(workload(), [firstOffer, secondOffer], new Map([["provider-a", first], ["provider-b", second]]));
+  assert.equal(leaseCalls.length, 2);
+  assert.equal(leaseCalls[0].state, "failed");
+  assert.equal(leaseCalls[1].state, "completed");
+});
+
+test("broker publishes only the fallback meter, no lease event, when no FACF attempt is made", async () => {
+  const idFactory = ids();
+  const leaseCalls = [];
+  const meterCalls = [];
+  const eventPublisher = { async publishLease(lease) { leaseCalls.push(lease); }, async publishMeter(meter) { meterCalls.push(meter); } };
+  const fallback = { providerId: "cloud", capability: { region: "FI", trustTier: "community", dataClasses: ["public"] }, async execute() { return { text: "cloud result", usage: { inputTokens: 1, outputTokens: 2 }, priceEur: 0.02 }; } };
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), fallback, clock: fixedClock, idFactory, eventPublisher });
+  const execution = await broker.run(workload(), [], new Map());
+  assert.equal(execution.route, "fallback");
+  assert.equal(leaseCalls.length, 0);
+  assert.equal(meterCalls.length, 1);
+  assert.equal(meterCalls[0].outcome, "fallback");
+});
+
+test("broker never throws or blocks the response when event publishing fails", async () => {
+  const idFactory = ids();
+  const eventPublisher = { async publishLease() { throw new Error("nats unavailable"); }, async publishMeter() { throw new Error("nats unavailable"); } };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, eventPublisher, logger: (entry) => logged.push(entry) });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(logged.some((entry) => entry.event === "event_publish_failed" && entry.kind === "lease"));
+  assert.ok(logged.some((entry) => entry.event === "event_publish_failed" && entry.kind === "meter"));
+});
+
+test("broker bounds pending event publishes independently and logs dropped events", async () => {
+  const idFactory = ids();
+  let releaseWrite;
+  const blockedWrite = new Promise((resolve) => { releaseWrite = resolve; });
+  const publishCalls = [];
+  const eventPublisher = {
+    publishLease(lease) { publishCalls.push({ kind: "lease", id: lease.leaseId }); return blockedWrite; },
+    publishMeter(meter) { publishCalls.push({ kind: "meter", id: meter.meterId }); return blockedWrite; }
+  };
+  const logged = [];
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({
+    leaseStore: new LeaseStore({ clock: fixedClock, idFactory }),
+    clock: fixedClock,
+    idFactory,
+    eventPublisher,
+    maxPendingEventWrites: 1,
+    logger: (entry) => logged.push(entry)
+  });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  assert.equal(publishCalls.length, 1);
+  assert.ok(logged.some((entry) => entry.event === "event_publish_dropped" && entry.kind === "meter" && entry.code === "queue_full"));
+  releaseWrite();
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+test("broker rejects an invalid event queue bound", () => {
+  assert.throws(
+    () => new Broker({ leaseStore: new LeaseStore({ clock: fixedClock }), maxPendingEventWrites: 0 }),
+    /maxPendingEventWrites must be a positive integer/
+  );
+});
+
+test("broker's audit log and event publisher queues are independent — one blocking never blocks the other", async () => {
+  const idFactory = ids();
+  const auditCalls = [];
+  const eventCalls = [];
+  const auditLog = {
+    async recordLease(lease) { auditCalls.push(lease); },
+    async recordMeter(meter) { auditCalls.push(meter); }
+  };
+  const eventPublisher = {
+    publishLease() { return new Promise(() => {}); }, // never resolves
+    publishMeter() { return new Promise(() => {}); }
+  };
+  const provider = new SimulatedProvider({ offer: offer(), clock: fixedClock, idFactory });
+  const broker = new Broker({ leaseStore: new LeaseStore({ clock: fixedClock, idFactory }), clock: fixedClock, idFactory, auditLog, eventPublisher });
+  const execution = await broker.run(workload(), [provider.advertise()], new Map([["provider-1", provider]]));
+  assert.equal(execution.route, "facf");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(auditCalls.length, 2); // lease + meter still recorded to Postgres even though NATS is permanently stuck
+});
