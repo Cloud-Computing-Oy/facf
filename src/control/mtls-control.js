@@ -200,6 +200,7 @@ async function handleAgentExecution({ message, socket, leaseAuthority, executor,
       throw new RemoteExecutionError("execution_cache_full", "execution replay cache is full");
     }
     if (!leaseAuthority.authorizeGrant(request.grant)) throw new RemoteExecutionError("grant_unauthorized", "execution grant is invalid or expired");
+    leaseAuthority.start(request.lease.leaseId);
     const entry = { fingerprint, promise: null, settled: false, expiry: null };
     const promise = (async () => {
       try {

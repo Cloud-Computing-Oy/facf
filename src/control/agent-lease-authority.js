@@ -8,6 +8,7 @@ export class AgentLeaseError extends Error {
 export class AgentLeaseAuthority {
   #grants = new Map();
   #requests = new Map();
+  #inFlight = new Set();
 
   constructor({ providerId, capabilityId, models, slots = 1, clock = () => new Date(), idFactory = randomUUID, tokenFactory = () => randomBytes(32).toString("base64url"), maxLeaseMs = 30000 } = {}) {
     if (!providerId || !capabilityId || !Array.isArray(models) || models.length < 1) throw new TypeError("providerId, capabilityId, and models are required");
@@ -56,9 +57,14 @@ export class AgentLeaseAuthority {
     return true;
   }
 
-  release(leaseId) { this.#requests.delete(leaseId); return this.#grants.delete(leaseId); }
+  start(leaseId) {
+    if (!this.#grants.has(leaseId)) throw new AgentLeaseError("grant_unauthorized", "cannot start an unknown or expired grant");
+    this.#inFlight.add(leaseId);
+  }
+
+  release(leaseId) { this.#inFlight.delete(leaseId); this.#requests.delete(leaseId); return this.#grants.delete(leaseId); }
   activeCount() { this.#expire(); return this.#grants.size; }
-  #expire() { const now = this.clock().getTime(); for (const [leaseId, grant] of this.#grants) if (Date.parse(grant.expiresAt) <= now) { this.#grants.delete(leaseId); this.#requests.delete(leaseId); } }
+  #expire() { const now = this.clock().getTime(); for (const [leaseId, grant] of this.#grants) if (!this.#inFlight.has(leaseId) && Date.parse(grant.expiresAt) <= now) { this.#grants.delete(leaseId); this.#requests.delete(leaseId); } }
 }
 
 function timingSafeEqualText(left, right) {
