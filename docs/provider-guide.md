@@ -32,6 +32,24 @@ shell, filesystem, or administrative access. Operators must treat a disconnect
 after dispatch as an unknown outcome until terminal evidence or expiry resolves
 the lease; it must not be replayed automatically elsewhere.
 
+## Relay nodes
+
+A relay node (`nodeType: relay`) forwards accepted workloads to a third-party
+cloud LLM API instead of executing on independently owned hardware. It is
+not idle compute capacity and must never be represented as one: relay nodes
+do not count toward the network's hardware-federation pilot targets or any
+claim about fragmented, independently owned capacity.
+
+Relay offers must declare their `relayUpstream` and are restricted to
+`public`/`synthetic` `dataClasses` regardless of trust tier, because
+execution leaves the provider's own infrastructure for a third-party cloud
+service. Every relay execution's meter event discloses `nodeType` and
+`relayUpstream` so the workload owner can see, after the fact, that the
+request was relayed rather than executed on federated hardware. A relay
+operator remains responsible for complying with its upstream API's own
+terms of service, including any restriction on reselling or proxying
+access.
+
 ## Compensation
 
 The protocol can carry provider offers and signed usage evidence. Settlement rules, taxes, minimum payout, chargebacks, and currency are network-operator policies. Providers should evaluate electricity, hardware depreciation, bandwidth, and tax obligations before offering capacity.

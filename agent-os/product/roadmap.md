@@ -35,6 +35,10 @@ fallback when a dispatched execution has an unknown outcome. Two manually
 enrolled provider cells must pass deterministic failure and reconciliation
 tests before incremental token streaming or NATS event delivery is added.
 
+Relay nodes (`nodeType: relay`, see ADR 0005) forward execution to a
+third-party cloud API and are not idle hardware capacity. They do not count
+toward this or any other milestone's provider-cell targets.
+
 ## Phase 2: Managed Verified Network
 
 - Commercial provider onboarding and ownership verification.

@@ -1,6 +1,6 @@
 # ADR 0005: Relay Node Type
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-13
 
 ## Context
