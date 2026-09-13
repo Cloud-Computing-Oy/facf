@@ -12,6 +12,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "demo": "node src/cli/demo.js",
     "demo:live": "node src/cli/live-ollama-demo.js",
+    "demo:relay": "node src/cli/live-deepseek-demo.js",
     "gateway:local": "node src/cli/local-gateway.js",
     "test": "node --test"
   },
