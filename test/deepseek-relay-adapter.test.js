@@ -83,3 +83,12 @@ test("DeepSeek relay adapter requires an API key", () => {
 test("DeepSeek relay adapter rejects credentials embedded in its base URL", () => {
   assert.throws(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "https://user:pass@api.deepseek.com" }), /must not contain credentials/);
 });
+
+test("DeepSeek relay adapter refuses a plaintext non-loopback base URL", () => {
+  assert.throws(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "http://relay.example.com" }), /must use https/);
+});
+
+test("DeepSeek relay adapter allows plaintext http only for loopback testing", () => {
+  assert.doesNotThrow(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "http://127.0.0.1:8080" }));
+  assert.doesNotThrow(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "http://localhost:8080" }));
+});

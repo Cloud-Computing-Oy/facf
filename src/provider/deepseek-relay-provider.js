@@ -6,6 +6,7 @@ export class DeepSeekRelayProvider {
   constructor({ offer, adapter, clock = () => new Date(), idFactory = randomUUID } = {}) {
     if (!adapter) throw new TypeError("adapter is required");
     this.offer = validateOffer(structuredClone(offer));
+    if (this.offer.nodeType !== "relay" || this.offer.relayUpstream !== "deepseek") throw new TypeError("DeepSeekRelayProvider requires a relay offer with relayUpstream 'deepseek'");
     this.adapter = adapter;
     this.clock = clock;
     this.idFactory = idFactory;
@@ -15,14 +16,20 @@ export class DeepSeekRelayProvider {
     return structuredClone(this.offer);
   }
 
-  async execute({ workload, lease, signal, timeoutMs }) {
+  async execute({ workload, lease, signal, timeoutMs, deadlineMs }) {
     if (lease.providerId !== this.offer.providerId || lease.offerId !== this.offer.offerId) throw new ProviderExecutionError("grant_mismatch", "lease is not bound to this provider offer");
     if (!this.offer.models.includes(workload.model)) throw new ProviderExecutionError("model_unavailable", "model is not available");
     if (workload.dataClass !== "public" && workload.dataClass !== "synthetic") throw new ProviderExecutionError("relay_dataclass_forbidden", "relay providers may only execute public or synthetic workloads");
     const messages = workload.input?.messages;
     if (!Array.isArray(messages) || messages.length === 0) throw new ProviderExecutionError("invalid_workload", "DeepSeek relay workloads require input.messages");
     const startedAt = this.clock();
-    const response = await this.adapter.chat({ model: workload.model, messages, options: sanitizeOptions(workload.input.options), signal, timeoutMs });
+    // The broker enforces its lease deadline by racing this promise with a timeout
+    // (src/core/broker.js), not by passing an abort signal into execute(). Deriving
+    // the adapter's own request timeout from deadlineMs ensures the outbound DeepSeek
+    // request is itself aborted at (or before) that same deadline, instead of
+    // continuing — and being billed — in the background after the broker gives up.
+    const effectiveTimeoutMs = Number.isFinite(deadlineMs) ? Math.max(0, deadlineMs - startedAt.getTime()) : timeoutMs;
+    const response = await this.adapter.chat({ model: workload.model, messages, options: sanitizeOptions(workload.input.options), signal, timeoutMs: effectiveTimeoutMs });
     const completedAt = this.clock();
     const meter = validateMeter({
       protocolVersion: "v0alpha1",

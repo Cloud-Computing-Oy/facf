@@ -14,13 +14,18 @@ if (process.env.FACF_LIVE_RELAY_DEMO !== "1") {
   const model = process.env.FACF_DEEPSEEK_MODEL || "deepseek-chat";
   const baseUrl = process.env.FACF_DEEPSEEK_BASE_URL || "https://api.deepseek.com";
   const providerId = process.env.FACF_PROVIDER_ID || "provider-deepseek-relay";
+  // DeepSeek's API does not publish a guaranteed execution region, and it is not
+  // EU-hosted by default, so this must never default to a claim like "EU" that the
+  // scheduler's EU-only region policies would treat as a real, verifiable location.
+  // Set FACF_DEEPSEEK_REGION only if the configured endpoint's actual region is known.
+  const region = process.env.FACF_DEEPSEEK_REGION || "GLOBAL";
   const offer = {
     protocolVersion: "v0alpha1",
     offerId: "offer-live-deepseek-relay",
     providerId,
     capabilityId: "capability-live-deepseek-relay",
     models: [model],
-    region: "EU",
+    region,
     trustTier: "community",
     dataClasses: ["public", "synthetic"],
     nodeType: "relay",
@@ -38,7 +43,7 @@ if (process.env.FACF_LIVE_RELAY_DEMO !== "1") {
     model,
     dataClass: "synthetic",
     minimumTrustTier: "community",
-    allowedRegions: ["EU"],
+    allowedRegions: [region],
     maximumPriceEur: 0,
     timeoutMs: 120000,
     input: {

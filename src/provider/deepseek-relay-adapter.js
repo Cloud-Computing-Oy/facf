@@ -7,6 +7,11 @@ export class DeepSeekRelayAdapter {
     this.baseUrl = new URL(baseUrl);
     if (!["http:", "https:"].includes(this.baseUrl.protocol)) throw new TypeError("DeepSeek relay baseUrl must use http or https");
     if (this.baseUrl.username || this.baseUrl.password) throw new TypeError("DeepSeek relay baseUrl must not contain credentials");
+    const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(this.baseUrl.hostname);
+    // Unlike the local, unauthenticated Ollama adapter, this adapter carries a
+    // reusable cloud API credential in its Authorization header — plaintext HTTP
+    // to a non-loopback host would send that credential over the network in the clear.
+    if (this.baseUrl.protocol === "http:" && !isLoopback) throw new TypeError("DeepSeek relay baseUrl must use https unless it targets a loopback address");
     this.fetchImpl = fetchImpl;
     this.timeoutMs = timeoutMs;
   }
