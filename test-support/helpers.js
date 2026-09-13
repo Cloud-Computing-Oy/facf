@@ -23,6 +23,7 @@ export const offer = (overrides = {}) => ({
   region: "FI",
   trustTier: "community",
   dataClasses: ["public", "synthetic"],
+  nodeType: "compute",
   availableSlots: 1,
   priceEur: 0.01,
   estimatedLatencyMs: 100,

@@ -4,7 +4,7 @@
   "title": "FACF Capacity Offer",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocolVersion", "offerId", "providerId", "capabilityId", "models", "region", "trustTier", "dataClasses", "availableSlots", "priceEur", "estimatedLatencyMs", "qualityScore", "expiresAt"],
+  "required": ["protocolVersion", "offerId", "providerId", "capabilityId", "models", "region", "trustTier", "dataClasses", "nodeType", "availableSlots", "priceEur", "estimatedLatencyMs", "qualityScore", "expiresAt"],
   "properties": {
     "protocolVersion": { "const": "v0alpha1" },
     "offerId": { "type": "string", "minLength": 1 },
@@ -14,10 +14,22 @@
     "region": { "type": "string", "minLength": 2 },
     "trustTier": { "enum": ["community", "verified", "confidential", "private"] },
     "dataClasses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["public", "synthetic", "internal", "confidential"] } },
+    "nodeType": { "enum": ["compute", "relay"] },
+    "relayUpstream": { "enum": ["deepseek"] },
     "availableSlots": { "type": "integer", "minimum": 0 },
     "priceEur": { "type": "number", "minimum": 0 },
     "estimatedLatencyMs": { "type": "integer", "minimum": 0 },
     "qualityScore": { "type": "number", "minimum": 0, "maximum": 1 },
     "expiresAt": { "type": "string", "format": "date-time" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "nodeType": { "const": "relay" } }, "required": ["nodeType"] },
+      "then": {
+        "required": ["relayUpstream"],
+        "properties": { "dataClasses": { "items": { "enum": ["public", "synthetic"] } } }
+      },
+      "else": { "not": { "required": ["relayUpstream"] } }
+    }
+  ]
 }

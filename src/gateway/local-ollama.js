@@ -35,6 +35,7 @@ export function createLocalOllamaGateway(config, { fetchImpl = fetch, clock = ()
     region: config.region,
     trustTier: "community",
     dataClasses: ["public", "synthetic"],
+    nodeType: "compute",
     availableSlots: 1,
     priceEur: 0,
     estimatedLatencyMs: 500,

@@ -20,6 +20,7 @@ if (process.env.FACF_LIVE_DEMO !== "1") {
     region: "FI",
     trustTier: "community",
     dataClasses: ["public", "synthetic"],
+    nodeType: "compute",
     availableSlots: 1,
     priceEur: 0,
     estimatedLatencyMs: 500,

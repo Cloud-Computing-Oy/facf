@@ -14,6 +14,7 @@ for (const name of expectedSchemas) {
 }
 validateWorkload(JSON.parse(await readFile(new URL("fixtures/workload.public.json", root), "utf8")));
 validateOffer(JSON.parse(await readFile(new URL("fixtures/offer.laptop.json", root), "utf8")));
+validateOffer(JSON.parse(await readFile(new URL("fixtures/offer.deepseek-relay.json", root), "utf8")));
 validateLeaseRequest(JSON.parse(await readFile(new URL("fixtures/lease-request.local.json", root), "utf8")));
 validateExecutionGrant(JSON.parse(await readFile(new URL("fixtures/execution-grant.local.json", root), "utf8")));
 console.log(`Protocol validation passed (${expectedSchemas.length} schemas).`);

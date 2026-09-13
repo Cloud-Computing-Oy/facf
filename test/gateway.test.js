@@ -63,7 +63,7 @@ test("HTTP gateway returns stable safe errors", async (t) => {
 
 test("HTTP gateway request is bounded by the workload timeout even when the provider hangs", async (t) => {
   const shortPolicy = { ...policy, timeoutMs: 100 };
-  const hungOffer = { protocolVersion: "v0alpha1", offerId: "offer-1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], region: "FI", trustTier: "verified", dataClasses: ["public", "synthetic"], availableSlots: 1, priceEur: 0.01, estimatedLatencyMs: 50, qualityScore: 0.9, expiresAt: "2099-01-01T00:00:00.000Z" };
+  const hungOffer = { protocolVersion: "v0alpha1", offerId: "offer-1", providerId: "provider-1", capabilityId: "cap-1", models: ["qwen2.5:7b"], region: "FI", trustTier: "verified", dataClasses: ["public", "synthetic"], nodeType: "compute", availableSlots: 1, priceEur: 0.01, estimatedLatencyMs: 50, qualityScore: 0.9, expiresAt: "2099-01-01T00:00:00.000Z" };
   const provider = { execute: () => new Promise(() => {}) };
   const broker = new Broker({ leaseStore: new LeaseStore(), maxAttempts: 1 });
   const server = createGatewayServer({ broker, offers: [hungOffer], providers: new Map([["provider-1", provider]]), policy: shortPolicy });

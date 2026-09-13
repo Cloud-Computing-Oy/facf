@@ -13,6 +13,8 @@ FACF assumes that clients, brokers, and compute providers may belong to differen
 
 A trust tier is an eligibility claim, not a guarantee that a workload is safe. The workload owner remains responsible for classifying data and selecting an allowed tier.
 
+Trust tier is orthogonal to `nodeType`: an operator's identity can be verified regardless of whether execution happens on their own hardware (`nodeType: compute`) or is forwarded to a third-party cloud API (`nodeType: relay`). Relay offers are structurally restricted to `public`/`synthetic` dataClasses at every trust tier, because verifying an operator's identity says nothing about the data-residency or confidentiality posture of the upstream API it forwards to. See [`docs/provider-guide.md`](provider-guide.md#relay-nodes) for the disclosure requirements.
+
 ## Identity and authorization
 
 - Every broker, agent, and operator has a cryptographic identity.
