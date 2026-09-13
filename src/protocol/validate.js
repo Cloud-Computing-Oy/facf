@@ -3,6 +3,8 @@ const DATA_CLASSES = ["public", "synthetic", "internal", "confidential"];
 const LEASE_STATES = ["offered", "accepted", "running", "completed", "failed", "expired", "released"];
 const FORBIDDEN_METER_KEYS = new Set(["prompt", "input", "output", "messages", "response", "content"]);
 const RUNTIMES = ["simulator", "ollama", "vllm"];
+const NODE_TYPES = ["compute", "relay"];
+const RELAY_UPSTREAMS = ["deepseek"];
 
 export class ProtocolValidationError extends Error {
   constructor(kind, issues) {
@@ -82,6 +84,15 @@ export function validateOffer(value) {
   for (const key of ["offerId", "providerId", "capabilityId", "region"]) text(value[key], key, issues);
   stringArray(value.models, "models", issues);
   stringArray(value.dataClasses, "dataClasses", issues, DATA_CLASSES);
+  if (!NODE_TYPES.includes(value.nodeType)) issues.push("nodeType is unsupported");
+  if (value.nodeType === "relay") {
+    if (!RELAY_UPSTREAMS.includes(value.relayUpstream)) issues.push("relayUpstream is required and must be supported when nodeType is relay");
+    if (Array.isArray(value.dataClasses) && value.dataClasses.some((entry) => entry !== "public" && entry !== "synthetic")) {
+      issues.push("relay offers may only advertise public or synthetic dataClasses");
+    }
+  } else if (value.relayUpstream !== undefined) {
+    issues.push("relayUpstream is only allowed when nodeType is relay");
+  }
   if (!TRUST_TIERS.includes(value.trustTier)) issues.push("trustTier is unsupported");
   if (!Number.isInteger(value.availableSlots) || value.availableSlots < 0) issues.push("availableSlots must be an integer >= 0");
   finite(value.priceEur, "priceEur", issues);

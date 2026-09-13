@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "v0alpha1",
+  "offerId": "offer-deepseek-relay-001",
+  "providerId": "provider-deepseek-relay",
+  "capabilityId": "capability-deepseek-relay-001",
+  "models": ["deepseek-chat"],
+  "region": "EU",
+  "trustTier": "community",
+  "dataClasses": ["public", "synthetic"],
+  "nodeType": "relay",
+  "relayUpstream": "deepseek",
+  "availableSlots": 1,
+  "priceEur": 0.01,
+  "estimatedLatencyMs": 800,
+  "qualityScore": 0.85,
+  "expiresAt": "2099-01-01T00:00:00.000Z"
+}

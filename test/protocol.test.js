@@ -16,6 +16,27 @@ test("negative provider price is rejected", () => {
   assert.throws(() => validateOffer(offer({ priceEur: -1 })), /priceEur/);
 });
 
+test("offer requires a supported nodeType", () => {
+  assert.throws(() => validateOffer(offer({ nodeType: "gpu-cluster" })), /nodeType/);
+});
+
+test("relay offer requires a supported relayUpstream", () => {
+  assert.throws(() => validateOffer(offer({ nodeType: "relay", relayUpstream: "openai" })), /relayUpstream/);
+  assert.doesNotThrow(() => validateOffer(offer({ nodeType: "relay", relayUpstream: "deepseek" })));
+});
+
+test("compute offer must not declare relayUpstream", () => {
+  assert.throws(() => validateOffer(offer({ relayUpstream: "deepseek" })), /relayUpstream/);
+});
+
+test("relay offer may only advertise public or synthetic dataClasses", () => {
+  assert.throws(
+    () => validateOffer(offer({ nodeType: "relay", relayUpstream: "deepseek", dataClasses: ["public", "internal"] })),
+    /public or synthetic/
+  );
+  assert.doesNotThrow(() => validateOffer(offer({ nodeType: "relay", relayUpstream: "deepseek", dataClasses: ["synthetic"] })));
+});
+
 test("meter metadata cannot contain prompt or output content", () => {
   const base = {
     protocolVersion: "v0alpha1",
