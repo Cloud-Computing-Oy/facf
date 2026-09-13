@@ -12,6 +12,12 @@ export class DeepSeekRelayAdapter {
     // reusable cloud API credential in its Authorization header — plaintext HTTP
     // to a non-loopback host would send that credential over the network in the clear.
     if (this.baseUrl.protocol === "http:" && !isLoopback) throw new TypeError("DeepSeek relay baseUrl must use https unless it targets a loopback address");
+    // A relative reference resolved against a base URL whose path does not end in "/"
+    // drops the base path's last segment entirely (WHATWG URL resolution treats it as
+    // a file, not a directory) — silently discarding any operator-configured path
+    // prefix such as a gateway/proxy mount point. Normalize once here so chat()'s
+    // relative "chat/completions" reference always preserves that prefix.
+    if (!this.baseUrl.pathname.endsWith("/")) this.baseUrl.pathname += "/";
     this.fetchImpl = fetchImpl;
     this.timeoutMs = timeoutMs;
   }
@@ -22,10 +28,12 @@ export class DeepSeekRelayAdapter {
     const timer = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, timeoutMs));
     const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     try {
-      const response = await this.fetchImpl(new URL("/chat/completions", this.baseUrl), {
+      const response = await this.fetchImpl(new URL("chat/completions", this.baseUrl), {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
-        body: JSON.stringify({ model, messages, ...options, stream: false }),
+        // options is spread first so a caller-supplied options object can never
+        // override the validated model/messages/stream values that follow it.
+        body: JSON.stringify({ ...options, model, messages, stream: false }),
         signal: requestSignal
       });
       if (response.status === 401 || response.status === 403) throw new ProviderExecutionError("relay_auth_error", "DeepSeek relay rejected the configured credentials");

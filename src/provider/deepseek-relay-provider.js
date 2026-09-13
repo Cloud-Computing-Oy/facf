@@ -28,7 +28,8 @@ export class DeepSeekRelayProvider {
     // the adapter's own request timeout from deadlineMs ensures the outbound DeepSeek
     // request is itself aborted at (or before) that same deadline, instead of
     // continuing — and being billed — in the background after the broker gives up.
-    const effectiveTimeoutMs = Number.isFinite(deadlineMs) ? Math.max(0, deadlineMs - startedAt.getTime()) : timeoutMs;
+    if (Number.isFinite(deadlineMs) && deadlineMs - startedAt.getTime() <= 0) throw new ProviderExecutionError("relay_timeout", "broker deadline had already elapsed before dispatch");
+    const effectiveTimeoutMs = Number.isFinite(deadlineMs) ? deadlineMs - startedAt.getTime() : timeoutMs;
     const response = await this.adapter.chat({ model: workload.model, messages, options: sanitizeOptions(workload.input.options), signal, timeoutMs: effectiveTimeoutMs });
     const completedAt = this.clock();
     const meter = validateMeter({

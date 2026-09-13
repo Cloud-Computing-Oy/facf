@@ -57,3 +57,16 @@ test("DeepSeek relay provider derives the adapter timeout from the broker's dead
   });
   assert.equal(capturedTimeoutMs, 4000);
 });
+
+test("DeepSeek relay provider refuses to dispatch once the broker's deadline has already elapsed", async () => {
+  const clock = () => new Date("2026-08-26T08:00:00.000Z");
+  const provider = new DeepSeekRelayProvider({ offer: relayOffer(), adapter: { async chat() { throw new Error("must not run"); } }, clock });
+  await assert.rejects(
+    () => provider.execute({
+      workload: workload({ model: "deepseek-chat" }),
+      lease: { leaseId: "lease-1", providerId: "provider-1", offerId: "offer-1" },
+      deadlineMs: clock().getTime() - 1
+    }),
+    (error) => error.code === "relay_timeout"
+  );
+});

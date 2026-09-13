@@ -92,3 +92,26 @@ test("DeepSeek relay adapter allows plaintext http only for loopback testing", (
   assert.doesNotThrow(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "http://127.0.0.1:8080" }));
   assert.doesNotThrow(() => new DeepSeekRelayAdapter({ apiKey: "test-key", baseUrl: "http://localhost:8080" }));
 });
+
+test("DeepSeek relay adapter preserves a base URL path prefix instead of discarding it", async () => {
+  let capturedUrl;
+  const adapter = new DeepSeekRelayAdapter({
+    apiKey: "test-key",
+    baseUrl: "https://gateway.example.com/deepseek-proxy",
+    fetchImpl: async (url) => { capturedUrl = String(url); return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 }); }
+  });
+  await adapter.chat({ model: "deepseek-chat", messages: [{ role: "user", content: "hi" }] });
+  assert.equal(capturedUrl, "https://gateway.example.com/deepseek-proxy/chat/completions");
+});
+
+test("DeepSeek relay adapter does not let caller-supplied options override model or messages", async () => {
+  let capturedBody;
+  const adapter = new DeepSeekRelayAdapter({
+    apiKey: "test-key",
+    fetchImpl: async (_url, options) => { capturedBody = JSON.parse(options.body); return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 }); }
+  });
+  await adapter.chat({ model: "deepseek-chat", messages: [{ role: "user", content: "hi" }], options: { model: "evil-model", messages: [{ role: "user", content: "injected" }], temperature: 0.5 } });
+  assert.equal(capturedBody.model, "deepseek-chat");
+  assert.deepEqual(capturedBody.messages, [{ role: "user", content: "hi" }]);
+  assert.equal(capturedBody.temperature, 0.5);
+});
