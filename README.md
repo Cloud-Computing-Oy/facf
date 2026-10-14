@@ -26,6 +26,34 @@ quality.
 FACF defines a common control plane for discovering that capacity, reserving it
 briefly, routing eligible workloads, measuring service, and falling back safely.
 
+### Why now
+
+Open-weight inference only recently became capable enough for a federation of
+idle GPUs to be worth building. The published record traces a specific path,
+not a vague trend:
+
+- The [Transformer](https://arxiv.org/abs/1706.03762) (2017) made
+  attention-based models parallelizable enough to serve on a single GPU.
+- [Chinchilla](https://arxiv.org/abs/2203.15556) (2022) showed smaller models
+  trained on more tokens beat larger ones, decoupling capability from raw size.
+- [LLaMA](https://arxiv.org/abs/2302.13971) (2023) put a 13B open-weight model
+  ahead of GPT-3 on most benchmarks.
+- [LoRA](https://arxiv.org/abs/2106.09685) (2021) and
+  [QLoRA](https://arxiv.org/abs/2305.14314) (2023) moved fine-tuning from a
+  cluster to a single GPU.
+- [Mistral 7B](https://arxiv.org/abs/2310.06825) and
+  [Mixtral](https://arxiv.org/abs/2401.04088) (2023) showed small and
+  sparse-MoE open models matching or beating models several times their
+  size — the capability profile an idle laptop or workstation GPU can serve.
+- [DeepSeek-R1](https://arxiv.org/abs/2501.12948) (2025) put
+  frontier-comparable reasoning behind open weights instead of a single
+  vendor's API.
+
+This is the capacity FACF schedules: not a theoretical surplus, but models
+capable enough to be worth routing, already runnable on the hardware the MVP
+targets (Ollama/vLLM, one GPU, warm replicas). Mistral and Mixtral map
+directly onto the MVP's "1–3 approved open-weight models" slot.
+
 ## What FACF is
 
 - A broker–agent protocol for independently operated provider cells.
